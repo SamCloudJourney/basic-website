@@ -249,3 +249,60 @@ Exact public GitHub searches were performed for combinations of:
 No public issue describing this hard-link rebasing containment bypass was found as of 2026-09-20.
 
 All files, paths, sentinels, and outside targets in the reproduction are researcher-controlled temporary files.
+
+
+## Multi-parent escape generality
+
+Clean run:
+
+https://github.com/SamCloudJourney/basic-website/actions/runs/35527839942
+
+A third independent construction uses the raw symlink target:
+
+```text
+../../../outside3/secret
+```
+
+At the original archive path:
+
+```text
+p1/p2/p3/s -> ../../../outside3/secret
+```
+
+that resolves to a file still inside the extraction root.
+
+The archive then creates:
+
+```text
+escape3 hardlink -> p1/p2/p3/s
+```
+
+On Linux, the new root-level hard link preserves the same symlink inode and therefore the same raw
+`../../../outside3/secret` target. From the new location it traverses multiple parent levels outside
+the extraction root.
+
+Confirmed on .NET 8.0.31, 9.0.20 and 10.0.12:
+
+```text
+MULTIPARENT_LINK_TARGET=../../../outside3/secret
+MULTIPARENT_ESCAPE_RESOLVED=<controlled path outside extraction root>
+TAR_HARDLINK_MULTIPARENT_ESCAPE=CONFIRMED
+```
+
+This shows the primitive is not limited to a single `..` or immediate sibling of the destination.
+
+## Intended boundary of the CVE-2026-45491 fix
+
+The public review discussion for fix PR #129281 explicitly narrowed the patch's intended guarantee:
+it is meant to defend against directory-escaping symlinks **introduced by the archive itself**, while
+pre-existing symlinks already present in the destination are treated as caller-controlled state.
+
+This variant is fully within that intended guarantee:
+
+- the safe source symlink is created by an archive entry;
+- the hard-link entry is created by the same archive;
+- no pre-existing destination symlink is required;
+- the escaping final link exists only because the archive caused .NET to rebase the symlink inode.
+
+The review discussion contains no consideration of hard-linking a safe symbolic link into a new parent
+directory and re-evaluating its relative target from that destination.
