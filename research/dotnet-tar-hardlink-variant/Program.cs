@@ -111,7 +111,7 @@ class Program
         return tar;
     }
 
-    static void Main()
+    static async Task Main()
     {
         Console.WriteLine($"FRAMEWORK={RuntimeInformation.FrameworkDescription}");
         Console.WriteLine($"OS={RuntimeInformation.OSDescription}");
@@ -176,6 +176,17 @@ class Program
 
             Require(File.ReadAllText(sourceLink) == "SAFE_INSIDE",
                 "original deep symlink must remain safely contained");
+
+            if (OperatingSystem.IsMacOS())
+            {
+                Require(escapedInfo.LinkTarget is null,
+                    "macOS negative control should hard-link the resolved file, not preserve the symlink inode");
+                Require(File.ReadAllText(escapedLink) == "SAFE_INSIDE",
+                    "macOS negative control must remain contained");
+                Console.WriteLine("MACOS_HARDLINK_SYMLINK_DEREFERENCE_CONTROL=PASS");
+                return;
+            }
+
             Require(File.ReadAllText(escapedLink) == "OUTSIDE_SENTINEL_61af",
                 "hard-linked symlink at shallower path must resolve to outside sentinel");
 
@@ -208,6 +219,17 @@ class Program
                 "rebased deep symlink must access second researcher-controlled outside path");
 
             Console.WriteLine("TAR_HARDLINK_REBASE_GENERALITY=CONFIRMED");
+
+            string asyncDest = Path.Combine(root, "async-dest");
+            Directory.CreateDirectory(asyncDest);
+            await TarFile.ExtractToDirectoryAsync(variantTar, asyncDest, overwriteFiles:true);
+
+            string asyncEscape = Path.Combine(asyncDest, "escape");
+            Require(new FileInfo(asyncEscape).LinkTarget == "../inside",
+                "async extraction must preserve rebased symlink inode on Linux");
+            Require(File.ReadAllText(asyncEscape) == "OUTSIDE_SENTINEL_61af",
+                "async extraction rebased link must resolve outside root");
+            Console.WriteLine("TAR_HARDLINK_REBASED_SYMLINK_ESCAPE_ASYNC=CONFIRMED");
 
             string writeDest = Path.Combine(root, "write-dest");
             Directory.CreateDirectory(writeDest);
