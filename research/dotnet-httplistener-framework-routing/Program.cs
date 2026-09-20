@@ -15,6 +15,7 @@ record CaseResult(
     bool AdminContext,
     bool AdminSentinel,
     bool AdminAction,
+    bool SideEffectCreated,
     string SelectorUserHost,
     string SelectorUrlHost,
     AuthenticationSchemes SelectedScheme);
@@ -23,6 +24,8 @@ class Program
 {
     private const string AdminSentinel = "FRAMEWORK_ADMIN_AUTH_BYPASS_SENTINEL_f31a";
     private const string AdminActionSentinel = "FRAMEWORK_ADMIN_STATE_CHANGE_SENTINEL_8d42";
+    private static readonly string SideEffectPath =
+        Path.Combine(Path.GetTempPath(), "httplistener-admin-sideeffect-8d42.txt");
 
     static int FreePort()
     {
@@ -134,6 +137,7 @@ class Program
             string payload = AdminSentinel + "\n";
             if (executeAdminAction)
             {
+                File.WriteAllText(SideEffectPath, "PROTECTED_ADMIN_OPERATION_EXECUTED");
                 payload += AdminActionSentinel + "\nADMIN_ACTION_EXECUTED=true\n";
             }
 
@@ -149,9 +153,10 @@ class Program
         bool basic = wire.Contains("WWW-Authenticate: Basic", StringComparison.OrdinalIgnoreCase);
         bool sentinel = wire.Contains(AdminSentinel, StringComparison.Ordinal);
         bool adminAction = wire.Contains(AdminActionSentinel, StringComparison.Ordinal);
+        bool sideEffectCreated = File.Exists(SideEffectPath);
 
         Console.WriteLine(
-            $"RESULT case={name} first={firstLine} basicChallenge={basic} publicContext={publicContext} adminContext={adminContext} adminSentinel={sentinel} adminAction={adminAction} selectorUserHost={selectorUserHost} selectorUrlHost={selectorUrlHost} selected={selected}");
+            $"RESULT case={name} first={firstLine} basicChallenge={basic} publicContext={publicContext} adminContext={adminContext} adminSentinel={sentinel} adminAction={adminAction} sideEffectCreated={sideEffectCreated} selectorUserHost={selectorUserHost} selectorUrlHost={selectorUrlHost} selected={selected}");
 
         publicListener.Close();
         adminListener.Close();
@@ -159,7 +164,7 @@ class Program
         // No authentication-rejected request may later materialize as a context.
         await Task.Delay(100);
 
-        return new CaseResult(name, firstLine, basic, publicContext, adminContext, sentinel, adminAction,
+        return new CaseResult(name, firstLine, basic, publicContext, adminContext, sentinel, adminAction, sideEffectCreated,
             selectorUserHost, selectorUrlHost, selected);
     }
 
@@ -180,9 +185,14 @@ class Program
             "ABSOLUTE_ADMIN_HOST_PUBLIC",
             p => $"GET http://admin.test:{p}/admin/ HTTP/1.1\r\nHost: public.test:{p}\r\nConnection: close\r\n\r\n");
 
+        try { File.Delete(SideEffectPath); } catch { }
+
         CaseResult adminActionControl = await RunCase(
             "ADMIN_ACTION_CONTROL",
             p => $"POST /admin/action HTTP/1.1\r\nHost: admin.test:{p}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+
+        Require(!File.Exists(SideEffectPath),
+            "ordinary unauthenticated admin POST must not create protected side-effect marker");
 
         CaseResult adminActionConflict = await RunCase(
             "ABSOLUTE_ADMIN_ACTION_HOST_PUBLIC",
@@ -200,7 +210,7 @@ class Program
 
         Require(adminActionControl.FirstLine.Contains("401"), "ordinary admin POST must require authentication");
         Require(adminActionControl.BasicChallenge, "ordinary admin POST must include Basic challenge");
-        Require(!adminActionControl.AdminContext && !adminActionControl.AdminAction,
+        Require(!adminActionControl.AdminContext && !adminActionControl.AdminAction && !adminActionControl.SideEffectCreated,
             "ordinary unauthenticated admin POST must not reach or execute admin action");
 
         if (OperatingSystem.IsWindows())
@@ -210,7 +220,7 @@ class Program
             Require(!conflict.AdminContext && !conflict.AdminSentinel, "Windows/http.sys must not deliver protected admin context");
             Require(adminActionConflict.FirstLine.Contains("401"), "Windows/http.sys must challenge conflicting admin POST");
             Require(adminActionConflict.BasicChallenge, "Windows/http.sys conflicting admin POST must include Basic challenge");
-            Require(!adminActionConflict.AdminContext && !adminActionConflict.AdminAction,
+            Require(!adminActionConflict.AdminContext && !adminActionConflict.AdminAction && !adminActionConflict.SideEffectCreated,
                 "Windows/http.sys must not execute protected admin action");
             Console.WriteLine("FRAMEWORK_PREFIX_WINDOWS_NEGATIVE_CONTROL=PASS");
         }
@@ -236,7 +246,12 @@ class Program
                 "admin POST selector must drop to Anonymous from stale public Host");
             Require(adminActionConflict.AdminAction,
                 "protected admin state-changing action must execute anonymously");
+            Require(adminActionConflict.SideEffectCreated && File.Exists(SideEffectPath),
+                "protected admin operation must create real researcher-controlled filesystem side effect");
+            Require(File.ReadAllText(SideEffectPath) == "PROTECTED_ADMIN_OPERATION_EXECUTED",
+                "filesystem side effect must contain expected protected-operation marker");
 
+            Console.WriteLine($"PROTECTED_ADMIN_SIDE_EFFECT_PATH={SideEffectPath}");
             Console.WriteLine("FRAMEWORK_PREFIX_ROUTING_AUTH_BYPASS=CONFIRMED");
             Console.WriteLine("FRAMEWORK_HOST_AND_PATH_PREFIX_AUTH_BYPASS=CONFIRMED");
             Console.WriteLine("FRAMEWORK_PREFIX_ADMIN_STATE_CHANGE_BYPASS=CONFIRMED");
