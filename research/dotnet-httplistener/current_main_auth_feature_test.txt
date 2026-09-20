@@ -29,10 +29,7 @@
 
             static AuthenticationSchemes SelectScheme(HttpListenerRequest request)
             {
-                string host = request.UserHostName ?? string.Empty;
-                string hostOnly = host.Split(':')[0];
-
-                return string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
+                return string.Equals(request.UserHostName, "public.test", StringComparison.OrdinalIgnoreCase)
                     ? AuthenticationSchemes.Anonymous
                     : AuthenticationSchemes.Basic;
             }
@@ -253,10 +250,7 @@
 
             static AuthenticationSchemes SelectScheme(HttpListenerRequest request)
             {
-                string host = request.UserHostName ?? string.Empty;
-                string hostOnly = host.Split(':')[0];
-
-                return string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
+                return string.Equals(request.UserHostName, "public.test", StringComparison.OrdinalIgnoreCase)
                     ? AuthenticationSchemes.Anonymous
                     : AuthenticationSchemes.Basic;
             }

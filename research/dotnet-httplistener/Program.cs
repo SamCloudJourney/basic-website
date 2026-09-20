@@ -211,7 +211,7 @@ class Program
             // 1) front-door authorization trusts UserHostName/Host and only permits public.test;
             // 2) application tenant routing uses Request.Url.Host;
             // 3) admin.test contains a synthetic secret unavailable to the public tenant.
-            bool authorizedAsPublic = string.Equals(userHost.Split(':')[0], "public.test", StringComparison.OrdinalIgnoreCase);
+            bool authorizedAsPublic = string.Equals(userHost, "public.test", StringComparison.OrdinalIgnoreCase);
             bool routedToAdmin = string.Equals(urlHost, "admin.test", StringComparison.OrdinalIgnoreCase);
             bool authorizationBypass = authorizedAsPublic && routedToAdmin;
 
@@ -254,10 +254,8 @@ class Program
         listener.Prefixes.Add($"http://*:{port}/");
         listener.AuthenticationSchemeSelectorDelegate = request =>
         {
-            string host = request.UserHostName ?? "";
-            string hostOnly = host.Split(':')[0];
             AuthenticationSchemes selected =
-                string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
+                string.Equals(request.UserHostName, "public.test", StringComparison.OrdinalIgnoreCase)
                     ? AuthenticationSchemes.Anonymous
                     : AuthenticationSchemes.Basic;
 
@@ -409,6 +407,9 @@ class Program
 
             ("ABS_ADMIN_HOST_PUBLIC", p =>
                 $"GET http://admin.test:{p}/feature HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
+
+            ("ABS_PUBLIC_HOST_ADMIN", p =>
+                $"GET http://public.test:{p}/feature HTTP/1.1\r\nHost: admin.test\r\nConnection: close\r\n\r\n"),
         };
 
         foreach (var authFeatureCase in authFeatureCases)
