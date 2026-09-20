@@ -1,0 +1,61 @@
+name: HttpListener authority authentication bypass final proof
+
+on:
+  push:
+    branches:
+      - research/dotnet-runtime-authority-final-20260920
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-net8
+            os: ubuntu-24.04
+            dotnet: "8.0"
+          - name: linux-net9
+            os: ubuntu-24.04
+            dotnet: "9.0"
+          - name: linux-net10
+            os: ubuntu-24.04
+            dotnet: "10.0"
+          - name: macos-net10
+            os: macos-15
+            dotnet: "10.0"
+          - name: windows-net10
+            os: windows-2025
+            dotnet: "10.0"
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ matrix.dotnet }}.x'
+
+      - name: Pin harness target framework
+        shell: bash
+        working-directory: research/dotnet-httplistener-auth-bypass
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("authority-bypass.csproj")
+          s = p.read_text()
+          s = s.replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net${{ matrix.dotnet }}</TargetFramework>")
+          p.write_text(s)
+          PY
+
+      - name: Runtime information
+        run: dotnet --info
+
+      - name: Run deterministic three-case proof
+        working-directory: research/dotnet-httplistener-auth-bypass
+        run: dotnet run -c Release
