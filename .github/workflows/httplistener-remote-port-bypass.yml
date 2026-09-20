@@ -48,7 +48,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          sudo ip netns exec hlclient python3 -c 'import socket; s=socket.create_connection(("10.203.0.1",46181),5); s.settimeout(10); req=b"POST http://service.test:46182/admin-action HTTP/1.1\\r\\nHost: service.test:46182\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"; s.sendall(req); data=s.recv(8192); print(data.decode("latin1")); assert b"200" in data and b"REMOTE_ADMIN_ACTION_EXECUTED=true" in data'
+          sudo ip netns exec hlclient python3 -c 'import socket; s=socket.create_connection(("10.203.0.1",46181),5); s.settimeout(10); req=b"POST http://10.203.0.1:46182/admin-action HTTP/1.1\\r\\nHost: 10.203.0.1:46182\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"; s.sendall(req); data=s.recv(8192); print(data.decode("latin1")); assert b"200" in data and b"REMOTE_ADMIN_ACTION_EXECUTED=true" in data'
 
       - name: Print server diagnostics
         if: always()

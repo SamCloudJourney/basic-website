@@ -9,13 +9,13 @@ try{File.Delete(ready);}catch{}
 try{File.Delete(marker);}catch{}
 
 AuthenticationSchemes Select(HttpListenerRequest r) =>
-    string.Equals(r.UserHostName,$"service.test:{publicPort}",StringComparison.OrdinalIgnoreCase)
+    string.Equals(r.UserHostName,$"10.203.0.1:{publicPort}",StringComparison.OrdinalIgnoreCase)
         ? AuthenticationSchemes.Anonymous : AuthenticationSchemes.Basic;
 
 using var pub=new HttpListener();
 using var adm=new HttpListener();
-pub.Prefixes.Add($"http://*:{publicPort}/");
-adm.Prefixes.Add($"http://*:{adminPort}/");
+pub.Prefixes.Add($"http://10.203.0.1:{publicPort}/");
+adm.Prefixes.Add($"http://10.203.0.1:{adminPort}/");
 pub.AuthenticationSchemes=AuthenticationSchemes.None;
 adm.AuthenticationSchemes=AuthenticationSchemes.None;
 pub.AuthenticationSchemeSelectorDelegate=Select;
@@ -38,7 +38,7 @@ if(loopback)throw new Exception("remote client unexpectedly arrived as loopback"
 if(publicTask.IsCompletedSuccessfully)throw new Exception("public listener received attack");
 if(ctx.User is not null)throw new Exception("expected anonymous protected context");
 if(ctx.Request.Url?.Port!=adminPort)throw new Exception("protected admin port not selected");
-if(!string.Equals(ctx.Request.UserHostName,$"service.test:{publicPort}",StringComparison.OrdinalIgnoreCase))
+if(!string.Equals(ctx.Request.UserHostName,$"10.203.0.1:{publicPort}",StringComparison.OrdinalIgnoreCase))
     throw new Exception("public authority not retained for selector");
 
 string sentinel="REMOTE_UNAUTHENTICATED_ADMIN_STATE_CHANGED_f31b";
