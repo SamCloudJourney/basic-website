@@ -101,8 +101,8 @@ jobs:
             process.exit(2);
           }, 90000);
           console.log('CHECKPOINT=before-app-ready');
-await app.whenReady();
-console.log('CHECKPOINT=app-ready');
+          await app.whenReady();
+          console.log('CHECKPOINT=app-ready');
           let exitCode = 0;
           try {
             console.log('SOURCE_AUTHORITY=' + nonLoopback + ':' + sourcePort);
@@ -111,12 +111,12 @@ console.log('CHECKPOINT=app-ready');
             console.log('TRUST_CONTROL=' + isURLDomainTrusted(URI.parse(`http://${nonLoopback}:${controlPort}/blocked`), []));
 
             console.log('CHECKPOINT=before-candidate');
-  const candidate = await extract('/candidate');
-  console.log('CHECKPOINT=after-candidate');
+            const candidate = await extract('/candidate');
+            console.log('CHECKPOINT=after-candidate');
             const candidateHits = hits.loopback;
             console.log('CHECKPOINT=before-control');
-  const control = await extract('/control');
-  console.log('CHECKPOINT=after-control');
+            const control = await extract('/control');
+            console.log('CHECKPOINT=after-control');
 
             console.log('CANDIDATE_RESULT=' + JSON.stringify(candidate));
             console.log('CONTROL_RESULT=' + JSON.stringify(control));
