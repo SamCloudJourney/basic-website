@@ -3,7 +3,7 @@ name: HttpListener framework-owned routing auth bypass
 on:
   push:
     branches:
-      - research/dotnet-httplistener-framework-routing-20260920
+      - research/dotnet-httplistener-admin-prefix-20260920
 
 permissions:
   contents: read
