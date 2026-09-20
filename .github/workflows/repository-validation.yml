@@ -145,7 +145,6 @@ jobs:
         working-directory: vscode
         run: |
           set -euxo pipefail
-          ELECTRON_RUN_AS_NODE=1 ./.build/electron/code-oss -e "console.log(require('electron'))" || true
-          cp ./.build/electron/code-oss /tmp/electron-bin
-          unset ELECTRON_RUN_AS_NODE
-          timeout 120s xvfb-run -a /tmp/electron-bin --no-sandbox ./vscode-localhost-redirect.mjs
+          unset ELECTRON_RUN_AS_NODE || true
+          export LD_LIBRARY_PATH="$PWD/.build/electron:${LD_LIBRARY_PATH:-}"
+          timeout 120s xvfb-run -a "$PWD/.build/electron/code-oss" --no-sandbox "$PWD/vscode-localhost-redirect.mjs"
