@@ -106,3 +106,13 @@ Demonstrated consequence:
 
 Suggested impact category:
 - Security Feature Bypass / Authentication Bypass
+
+
+## Strong credential-validation controls
+
+- [x] Admin request without credentials -> Basic 401, no context
+- [x] Wrong Basic credentials rejected by independent app validation -> 403, no side effect
+- [x] Correct Basic credentials pass validation -> protected operation succeeds
+- [x] Conflicting absolute-form request with no credentials -> Anonymous context, validation path skipped, same protected operation succeeds
+- [x] Concrete temp-file side effect confirms operation execution
+- [x] Windows/http.sys blocks the no-credential conflicting request before application context delivery
