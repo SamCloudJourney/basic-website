@@ -19,6 +19,9 @@ jobs:
           - { name: linux-net10, os: ubuntu-24.04, sdk: "10.0.x", tfm: "10.0" }
           - { name: macos-net10, os: macos-15, sdk: "10.0.x", tfm: "10.0" }
           - { name: windows-net10, os: windows-2025, sdk: "10.0.x", tfm: "10.0" }
+          - { name: linux-net11-rc1, os: ubuntu-24.04, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+          - { name: macos-net11-rc1, os: macos-15, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+          - { name: windows-net11-rc1, os: windows-2025, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
