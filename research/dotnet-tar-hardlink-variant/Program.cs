@@ -111,6 +111,37 @@ class Program
         return tar;
     }
 
+
+    static string CreateMultiParentVariantTar(string root)
+    {
+        string tar = Path.Combine(root, "multiparent-variant.tar");
+        using FileStream fs = File.Create(tar);
+        using TarWriter writer = new TarWriter(fs, leaveOpen:false);
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "p1/"));
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "p1/p2/"));
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "p1/p2/p3/"));
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "outside3/"));
+
+        byte[] safeBytes = Encoding.UTF8.GetBytes("MULTIPARENT_SAFE_INSIDE");
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "outside3/secret")
+        {
+            DataStream = new MemoryStream(safeBytes, writable:false)
+        });
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.SymbolicLink, "p1/p2/p3/s")
+        {
+            LinkName = "../../../outside3/secret"
+        });
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.HardLink, "escape3")
+        {
+            LinkName = "p1/p2/p3/s"
+        });
+
+        return tar;
+    }
+
     static async Task Main()
     {
         Console.WriteLine($"FRAMEWORK={RuntimeInformation.FrameworkDescription}");
@@ -219,6 +250,30 @@ class Program
                 "rebased deep symlink must access second researcher-controlled outside path");
 
             Console.WriteLine("TAR_HARDLINK_REBASE_GENERALITY=CONFIRMED");
+
+            string outside3Dir = Path.Combine(root, "outside3");
+            Directory.CreateDirectory(outside3Dir);
+            File.WriteAllText(Path.Combine(outside3Dir, "secret"), "MULTIPARENT_OUTSIDE_SENTINEL_42b8");
+
+            string multiParentBase = Path.Combine(root, "w1", "w2");
+            Directory.CreateDirectory(multiParentBase);
+            string multiParentDest = Path.Combine(multiParentBase, "multi-dest");
+            Directory.CreateDirectory(multiParentDest);
+
+            string multiParentTar = CreateMultiParentVariantTar(root);
+            TarFile.ExtractToDirectory(multiParentTar, multiParentDest, overwriteFiles:true);
+
+            string multiSource = Path.Combine(multiParentDest, "p1", "p2", "p3", "s");
+            string multiEscape = Path.Combine(multiParentDest, "escape3");
+
+            Require(File.ReadAllText(multiSource) == "MULTIPARENT_SAFE_INSIDE",
+                "multi-parent source symlink must be safe at its original archive location");
+            Require(File.ReadAllText(multiEscape) == "MULTIPARENT_OUTSIDE_SENTINEL_42b8",
+                "rebased link must traverse multiple parent levels to controlled outside target");
+
+            Console.WriteLine($"MULTIPARENT_LINK_TARGET={new FileInfo(multiEscape).LinkTarget}");
+            Console.WriteLine($"MULTIPARENT_ESCAPE_RESOLVED={new FileInfo(multiEscape).ResolveLinkTarget(true)?.FullName}");
+            Console.WriteLine("TAR_HARDLINK_MULTIPARENT_ESCAPE=CONFIRMED");
 
             string asyncDest = Path.Combine(root, "async-dest");
             Directory.CreateDirectory(asyncDest);
