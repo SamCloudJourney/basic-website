@@ -1,0 +1,24 @@
+name: HttpListener absolute-form port authority matrix
+on:
+  push:
+    branches: [research/httplistener-port-authority-20260920]
+permissions:
+  contents: read
+jobs:
+  port-authority:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: '10.0.x' }
+      - name: Configure aliases
+        shell: bash
+        run: echo '127.0.0.1 public.test admin.test' | sudo tee -a /etc/hosts
+      - name: Run port-authority matrix
+        working-directory: research/httplistener-port-authority
+        run: dotnet run -c Release
