@@ -181,6 +181,8 @@ jobs:
         run: |
           set -euxo pipefail
           python3 research/dotnet-httplistener/proxy_probe.py | tee /tmp/probe.log
+          echo '--- malformed chunk extension proxy matrix ---'
+          python3 research/dotnet-httplistener/chunk_proxy_probe.py | tee /tmp/chunk-proxy.log
           echo '--- backend contexts ---'
           cat /tmp/backend.log
           echo '--- nginx logs ---'
