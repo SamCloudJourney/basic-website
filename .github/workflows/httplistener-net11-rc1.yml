@@ -1,0 +1,26 @@
+name: .NET 11 RC1 HttpListener authority matrix
+
+on:
+  push:
+    branches:
+      - research/httplistener-net11-rc1-20260920
+
+permissions:
+  contents: read
+
+jobs:
+  rc1:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100-rc.1.26425.128'
+      - name: Run exact RC1 authority matrix
+        working-directory: research/httplistener-net11-rc1
+        run: dotnet run -c Release
