@@ -22,7 +22,7 @@ jobs:
           set -euxo pipefail
           git clone --filter=blob:none https://github.com/dotnet/runtime.git runtime-src
           cd runtime-src
-          git checkout 12921b1d8c6865a774232de9379133020ad23d79
+          git checkout f8546ab27b4eb75894e2574c7da144f039d4c95c
           echo "RUNTIME_SOURCE_HEAD=$(git rev-parse HEAD)"
 
       - name: Install native prerequisites
@@ -52,3 +52,33 @@ jobs:
         working-directory: runtime-src
         run: |
           ./dotnet.sh build src/libraries/System.Net.HttpListener/tests/System.Net.HttpListener.Tests.csproj             -c Release             /t:Test             /p:XunitMethodName=System.Net.Tests.HttpListenerAuthenticationTests.AbsoluteFormPublicPortToAdminSocket_BypassesPerPortAuthentication
+
+      - name: Apply experimental selector-authority agreement guard
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("src/libraries/System.Net.HttpListener/src/System/Net/HttpListenerRequest.cs")
+          s = p.read_text()
+          old = "        public string UserHostName => Headers[HttpKnownHeaderNames.Host]!;"
+          new = "        public string UserHostName => Url?.Authority ?? Headers[HttpKnownHeaderNames.Host]!;"
+          assert old in s
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff -- src/libraries/System.Net.HttpListener/src/System/Net/HttpListenerRequest.cs
+
+      - name: Rebuild patched HttpListener product assembly
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./dotnet.sh build src/libraries/System.Net.HttpListener/src/System.Net.HttpListener.csproj -c Release
+
+      - name: Run current-main cross-port causal guard
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./dotnet.sh build src/libraries/System.Net.HttpListener/tests/System.Net.HttpListener.Tests.csproj -c Release /t:Test /p:TestNoBuild=true /p:XunitMethodName=System.Net.Tests.HttpListenerAuthenticationTests.AbsoluteFormPublicPortToAdminSocket_AuthorityAgreementGuard_BlocksBypass
