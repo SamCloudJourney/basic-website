@@ -146,31 +146,33 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p=Path("src/vs/platform/webContentExtractor/test/electron-main/webPageLoader.test.ts")
-          s=p.read_text()
-          marker="\t//#region Redirect Tests\n"
-          test=r"""
-	 test('localhost redirect is implicitly trusted while equivalent non-local redirect is blocked', async () => {
-		const source = URI.parse('https://attacker.example/start');
-		const loader = createWebPageLoader(source, { followRedirects: false }, (uri) => isURLDomainTrusted(uri, []));
-		window.webContents.debugger.sendCommand.resolves({});
-		const loadPromise = loader.load();
-
-		const localhostEvent: MockElectronEvent = { preventDefault: sinon.stub() };
-		window.webContents.emit('will-redirect', localhostEvent, 'http://127.0.0.1:43123/private');
-		assert.strictEqual(isURLDomainTrusted(URI.parse('http://127.0.0.1:43123/private'), []), true);
-		assert.ok(!(localhostEvent.preventDefault!).called, 'localhost redirect should be followed by current production policy');
-
-		const blockedEvent: MockElectronEvent = { preventDefault: sinon.stub() };
-		window.webContents.emit('will-redirect', blockedEvent, 'https://not-trusted.invalid/private');
-		const result = await loadPromise;
-		assert.ok((blockedEvent.preventDefault!).called, 'non-trusted cross-authority redirect should be blocked');
-		assert.strictEqual(result.status, 'redirect');
-		console.log('LOCALHOST_REDIRECT_POLICY_DIFFERENTIAL=CONFIRMED');
-	});
-"""
+          p = Path("src/vs/platform/webContentExtractor/test/electron-main/webPageLoader.test.ts")
+          s = p.read_text()
+          marker = "\t//#region Redirect Tests\\n"
+          lines = [
+              "\t test('localhost redirect is implicitly trusted while equivalent non-local redirect is blocked', async () => {",
+              "\t\tconst source = URI.parse('https://attacker.example/start');",
+              "\t\tconst loader = createWebPageLoader(source, { followRedirects: false }, (uri) => isURLDomainTrusted(uri, []));",
+              "\t\twindow.webContents.debugger.sendCommand.resolves({});",
+              "\t\tconst loadPromise = loader.load();",
+              "",
+              "\t\tconst localhostEvent: MockElectronEvent = { preventDefault: sinon.stub() };",
+              "\t\twindow.webContents.emit('will-redirect', localhostEvent, 'http://127.0.0.1:43123/private');",
+              "\t\tassert.strictEqual(isURLDomainTrusted(URI.parse('http://127.0.0.1:43123/private'), []), true);",
+              "\t\tassert.ok(!(localhostEvent.preventDefault!).called);",
+              "",
+              "\t\tconst blockedEvent: MockElectronEvent = { preventDefault: sinon.stub() };",
+              "\t\twindow.webContents.emit('will-redirect', blockedEvent, 'https://not-trusted.invalid/private');",
+              "\t\tconst result = await loadPromise;",
+              "\t\tassert.ok((blockedEvent.preventDefault!).called);",
+              "\t\tassert.strictEqual(result.status, 'redirect');",
+              "\t\tconsole.log('LOCALHOST_REDIRECT_POLICY_DIFFERENTIAL=CONFIRMED');",
+              "\t});",
+              ""
+          ]
+          test = "\\n".join(lines)
           assert marker in s
-          p.write_text(s.replace(marker, marker+test, 1))
+          p.write_text(s.replace(marker, marker + test, 1))
           PY
           npm run transpile-client
 
