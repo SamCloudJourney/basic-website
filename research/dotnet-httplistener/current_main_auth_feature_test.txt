@@ -59,7 +59,8 @@
             await client.SendAsync(Encoding.ASCII.GetBytes(raw));
 
             byte[] buffer = new byte[4096];
-            int bytesRead = await client.ReceiveAsync(buffer, System.Net.Sockets.SocketFlags.None);
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+            int bytesRead = await client.ReceiveAsync(buffer.AsMemory(), System.Net.Sockets.SocketFlags.None, cts.Token);
             string response = Encoding.ASCII.GetString(buffer, 0, bytesRead);
 
             Assert.Contains("401", response);
