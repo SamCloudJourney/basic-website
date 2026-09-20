@@ -45,7 +45,11 @@ jobs:
         run: |
           set -euxo pipefail
           dotnet --info
-          dotnet run -c Release -p:TargetFramework=net${{ matrix.tfm }}
+          sed -i "s#<TargetFramework>net10.0</TargetFramework>#<TargetFramework>net${{ matrix.tfm }}</TargetFramework>#" dotnet-httplistener.csproj
+          cat dotnet-httplistener.csproj
+          rm -rf obj bin
+          dotnet restore
+          dotnet run -c Release --no-restore
 
   boundary-chain:
     runs-on: ubuntu-24.04
