@@ -1,0 +1,83 @@
+        [ConditionalFact(typeof(HttpListenerFactory), nameof(HttpListenerFactory.SupportsWildcards))]
+        public async Task AbsoluteFormPublicPortToAdminSocket_BypassesPerPortAuthentication()
+        {
+            static int GetFreePort()
+            {
+                using var tcp = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                tcp.Bind(new IPEndPoint(IPAddress.Loopback, 0));
+                return ((IPEndPoint)tcp.LocalEndPoint!).Port;
+            }
+
+            int publicPort = GetFreePort();
+            int adminPort = GetFreePort();
+            while (adminPort == publicPort)
+            {
+                adminPort = GetFreePort();
+            }
+
+            using var publicListener = new HttpListener();
+            using var adminListener = new HttpListener();
+
+            publicListener.Prefixes.Add($"http://localhost:{publicPort}/public/");
+            adminListener.Prefixes.Add($"http://localhost:{adminPort}/admin/");
+
+            publicListener.AuthenticationSchemes = AuthenticationSchemes.Anonymous;
+
+            AuthenticationSchemes selected = AuthenticationSchemes.None;
+            string selectorUserHost = string.Empty;
+            string selectorUrlAuthority = string.Empty;
+
+            adminListener.AuthenticationSchemes = AuthenticationSchemes.None;
+            adminListener.AuthenticationSchemeSelectorDelegate = request =>
+            {
+                selectorUserHost = request.UserHostName ?? string.Empty;
+                selectorUrlAuthority = request.Url?.Authority ?? string.Empty;
+
+                int colon = selectorUserHost.LastIndexOf(':');
+                int seenPort = colon >= 0 &&
+                    int.TryParse(selectorUserHost[(colon + 1)..], out int parsed)
+                        ? parsed
+                        : -1;
+
+                selected = seenPort == publicPort
+                    ? AuthenticationSchemes.Anonymous
+                    : AuthenticationSchemes.Basic;
+
+                return selected;
+            };
+
+            publicListener.Start();
+            adminListener.Start();
+
+            Task<HttpListenerContext> publicTask = publicListener.GetContextAsync();
+            Task<HttpListenerContext> adminTask = adminListener.GetContextAsync();
+
+            using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            await client.ConnectAsync(IPAddress.Loopback, adminPort);
+
+            string raw =
+                $"POST http://localhost:{publicPort}/admin/change HTTP/1.1\r\n" +
+                $"Host: localhost:{publicPort}\r\n" +
+                "Content-Length: 0\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+
+            await client.SendAsync(Encoding.ASCII.GetBytes(raw), SocketFlags.None);
+
+            HttpListenerContext context =
+                await adminTask.WaitAsync(TimeSpan.FromSeconds(5));
+
+            Assert.False(publicTask.IsCompletedSuccessfully);
+            Assert.Equal(AuthenticationSchemes.Anonymous, selected);
+            Assert.EndsWith($":{publicPort}", selectorUserHost, StringComparison.Ordinal);
+            Assert.EndsWith($":{adminPort}", selectorUrlAuthority, StringComparison.Ordinal);
+            Assert.Equal(adminPort, context.Request.LocalEndPoint.Port);
+            Assert.Equal(adminPort, context.Request.Url!.Port);
+            Assert.Null(context.User);
+
+            Console.WriteLine(
+                $"CURRENT_MAIN_CROSS_PORT_AUTH_BYPASS=CONFIRMED publicPort={publicPort} adminPort={adminPort} UserHostName={selectorUserHost} UrlAuthority={selectorUrlAuthority}");
+
+            context.Response.Close();
+        }
+
