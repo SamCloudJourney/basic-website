@@ -141,10 +141,41 @@ jobs:
           }
           EOF
 
-      - name: Run Electron integration test
+      - name: Add production-path redirect regression
+        working-directory: vscode
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("src/vs/platform/webContentExtractor/test/electron-main/webPageLoader.test.ts")
+          s=p.read_text()
+          marker="\t//#region Redirect Tests\n"
+          test=r"""
+	 test('localhost redirect is implicitly trusted while equivalent non-local redirect is blocked', async () => {
+		const source = URI.parse('https://attacker.example/start');
+		const loader = createWebPageLoader(source, { followRedirects: false }, (uri) => isURLDomainTrusted(uri, []));
+		window.webContents.debugger.sendCommand.resolves({});
+		const loadPromise = loader.load();
+
+		const localhostEvent: MockElectronEvent = { preventDefault: sinon.stub() };
+		window.webContents.emit('will-redirect', localhostEvent, 'http://127.0.0.1:43123/private');
+		assert.strictEqual(isURLDomainTrusted(URI.parse('http://127.0.0.1:43123/private'), []), true);
+		assert.ok(!(localhostEvent.preventDefault!).called, 'localhost redirect should be followed by current production policy');
+
+		const blockedEvent: MockElectronEvent = { preventDefault: sinon.stub() };
+		window.webContents.emit('will-redirect', blockedEvent, 'https://not-trusted.invalid/private');
+		const result = await loadPromise;
+		assert.ok((blockedEvent.preventDefault!).called, 'non-trusted cross-authority redirect should be blocked');
+		assert.strictEqual(result.status, 'redirect');
+		console.log('LOCALHOST_REDIRECT_POLICY_DIFFERENTIAL=CONFIRMED');
+	});
+"""
+          assert marker in s
+          p.write_text(s.replace(marker, marker+test, 1))
+          PY
+          npm run transpile-client
+
+      - name: Run VS Code production WebPageLoader tests
         working-directory: vscode
         run: |
           set -euxo pipefail
-          unset ELECTRON_RUN_AS_NODE || true
-          export LD_LIBRARY_PATH="$PWD/.build/electron:${LD_LIBRARY_PATH:-}"
-          timeout 120s xvfb-run -a "$PWD/.build/electron/code-oss" --no-sandbox "$PWD/vscode-localhost-redirect.mjs"
+          npm run test-node -- --run src/vs/platform/webContentExtractor/test/electron-main/webPageLoader.test.ts
