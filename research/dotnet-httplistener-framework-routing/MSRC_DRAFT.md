@@ -40,6 +40,15 @@ The same ordinary request to `admin.test` selects Basic, receives `401 Unauthori
 Windows/http.sys canonicalizes the conflicting absolute-form request to the request-target authority before the
 selector runs, so the identical control remains protected.
 
+## Attack preconditions
+
+The proof sends the request directly over a TCP socket to HttpListener. No forward proxy, reverse proxy, browser,
+DNS rebinding, or intermediary parser is required for the vulnerable interpretation.
+
+The attacker needs network reachability to an affected managed HttpListener endpoint and the application must use the
+documented per-request authentication selector in a host-dependent configuration. The public and admin authorities may
+resolve to the same server address, as in ordinary name-based virtual hosting.
+
 ## Security invariant
 
 A single accepted request must not use one authority to choose the target HttpListener and a different authority to
