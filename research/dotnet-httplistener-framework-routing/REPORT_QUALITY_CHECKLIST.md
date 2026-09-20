@@ -116,3 +116,14 @@ Suggested impact category:
 - [x] Conflicting absolute-form request with no credentials -> Anonymous context, validation path skipped, same protected operation succeeds
 - [x] Concrete temp-file side effect confirms operation execution
 - [x] Windows/http.sys blocks the no-credential conflicting request before application context delivery
+
+
+## Cross-port authority expansion
+
+- [x] Same-host public/admin ports tested
+- [x] Ordinary admin-port request -> Basic 401
+- [x] Absolute-form public-port authority sent directly to admin socket -> Anonymous admin context
+- [x] Protected operation side effect executes
+- [x] Cross-port absolute-form variant reproduces on Windows/http.sys
+- [x] Reproduces on .NET 8, 9, 10, and .NET 11 RC1
+- [x] Shows complete remediation must canonicalize host + port, not host only
