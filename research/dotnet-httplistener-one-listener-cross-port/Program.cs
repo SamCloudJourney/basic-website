@@ -15,7 +15,7 @@ class Program
     record Obs(
         string Name,
         string FirstLine,
-        bool BasicChallenge,
+        bool NegotiateChallenge,
         bool ContextDelivered,
         AuthenticationSchemes Selected,
         string UserHostName,
@@ -90,7 +90,7 @@ class Program
 
             selected = seenPort == publicPort
                 ? AuthenticationSchemes.Anonymous
-                : AuthenticationSchemes.Basic;
+                : AuthenticationSchemes.Negotiate;
 
             Console.WriteLine(
                 $"SELECTOR case={name} UserHostName={selectorUserHost} UrlAuthority={selectorUrlAuthority} SeenPort={seenPort} PublicPort={publicPort} AdminPort={adminPort} Selected={selected}");
@@ -156,18 +156,18 @@ class Program
         await Task.WhenAny(handler, Task.Delay(1000));
 
         string firstLine = wire.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)[0];
-        bool basicChallenge =
-            wire.Contains("WWW-Authenticate: Basic", StringComparison.OrdinalIgnoreCase);
+        bool negotiateChallenge =
+            wire.Contains("WWW-Authenticate: Negotiate", StringComparison.OrdinalIgnoreCase);
         bool delivered = contextTask.IsCompletedSuccessfully;
         bool sideEffect = File.Exists(SideEffectPath);
 
         Console.WriteLine(
-            $"RESULT case={name} first={firstLine} basicChallenge={basicChallenge} context={delivered} selected={selected} selectorUserHost={selectorUserHost} selectorUrlAuthority={selectorUrlAuthority} localPort={localPort} path={path} anonymous={anonymous} sideEffect={sideEffect}");
+            $"RESULT case={name} first={firstLine} negotiateChallenge={negotiateChallenge} context={delivered} selected={selected} selectorUserHost={selectorUserHost} selectorUrlAuthority={selectorUrlAuthority} localPort={localPort} path={path} anonymous={anonymous} sideEffect={sideEffect}");
 
         listener.Close();
 
         return new Obs(
-            name, firstLine, basicChallenge, delivered, selected,
+            name, firstLine, negotiateChallenge, delivered, selected,
             selectorUserHost, selectorUrlAuthority, localPort, path,
             anonymous, sideEffect);
     }
@@ -217,16 +217,16 @@ class Program
 
         Require(adminControl.FirstLine.Contains("401"),
             "admin prefix control without credentials must be 401");
-        Require(adminControl.BasicChallenge &&
-                adminControl.Selected == AuthenticationSchemes.Basic &&
+        Require(adminControl.NegotiateChallenge &&
+                adminControl.Selected == AuthenticationSchemes.Negotiate &&
                 !adminControl.ContextDelivered &&
                 !adminControl.SideEffect,
-            "admin control must be blocked by Basic before context delivery");
+            "admin control must be blocked by Negotiate before context delivery");
 
         Require(attack.FirstLine.Contains("200"),
             "cross-port attack must succeed");
-        Require(!attack.BasicChallenge,
-            "cross-port attack must suppress Basic challenge");
+        Require(!attack.NegotiateChallenge,
+            "cross-port attack must suppress Negotiate challenge");
         Require(attack.Selected == AuthenticationSchemes.Anonymous,
             "selector must downgrade cross-port attack to Anonymous");
         Require(attack.ContextDelivered &&
