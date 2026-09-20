@@ -11,6 +11,7 @@ sealed record Observation(
     string FirstLine,
     bool SentinelReturned,
     bool StateChangeReturned,
+    bool HasBasicChallenge,
     bool ContextDelivered,
     string SelectorUserHost,
     string SelectorUrlHost,
@@ -130,6 +131,7 @@ class Program
         string firstLine = response.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)[0];
         bool sentinelReturned = response.Contains(Sentinel, StringComparison.Ordinal);
         bool stateChangeReturned = response.Contains("ADMIN_STATE_CHANGE_SENTINEL_83bd", StringComparison.Ordinal);
+        bool hasBasicChallenge = response.Contains("WWW-Authenticate: Basic", StringComparison.OrdinalIgnoreCase);
 
         listener.Stop();
 
@@ -138,6 +140,7 @@ class Program
             firstLine,
             sentinelReturned,
             stateChangeReturned,
+            hasBasicChallenge,
             contextDelivered,
             selectorUserHost,
             selectorUrlHost,
@@ -148,7 +151,7 @@ class Program
         Console.WriteLine(
             $"RESULT case={name} first={firstLine} context={contextDelivered} " +
             $"selectorUserHost={selectorUserHost} selectorUrlHost={selectorUrlHost} scheme={selectedScheme} " +
-            $"contextUserHost={contextUserHost} contextUrlHost={contextUrlHost} sentinel={sentinelReturned} stateChange={stateChangeReturned}");
+            $"contextUserHost={contextUserHost} contextUrlHost={contextUrlHost} sentinel={sentinelReturned} stateChange={stateChangeReturned} basicChallenge={hasBasicChallenge}");
 
         return observation;
     }
@@ -207,8 +210,10 @@ class Program
         Require(publicOrigin.FirstLine.Contains("200"), "public origin must remain accessible");
         Require(!publicOrigin.SentinelReturned, "public origin must not receive admin sentinel");
         Require(adminOrigin.FirstLine.Contains("401"), "ordinary admin origin must require Basic authentication");
+        Require(adminOrigin.HasBasicChallenge, "ordinary admin origin must include framework Basic challenge");
         Require(!adminOrigin.SentinelReturned, "ordinary unauthenticated admin request must not receive admin sentinel");
         Require(urlSelectorControl.FirstLine.Contains("401"), "Url.Host-based selector must challenge the conflicting admin authority");
+        Require(urlSelectorControl.HasBasicChallenge, "Url.Host selector control must include framework Basic challenge");
         Require(!urlSelectorControl.SentinelReturned, "Url.Host-based selector control must not disclose the admin sentinel");
         Require(urlSelectorControl.SelectedScheme == AuthenticationSchemes.Basic,
             "Url.Host-based selector must select Basic for admin authority");
@@ -216,12 +221,15 @@ class Program
 
         Require(adminActionOrigin.FirstLine.Contains("401"),
             "ordinary admin POST must require Basic authentication");
+        Require(adminActionOrigin.HasBasicChallenge,
+            "ordinary admin POST must include framework Basic challenge");
         Require(!adminActionOrigin.StateChangeReturned,
             "ordinary unauthenticated admin POST must not execute state-changing action");
 
         if (OperatingSystem.IsWindows())
         {
             Require(conflict.FirstLine.Contains("401"), "Windows control must challenge mismatched absolute-form request");
+            Require(conflict.HasBasicChallenge, "Windows mismatch must include framework Basic challenge");
             Require(!conflict.SentinelReturned, "Windows control must not return admin sentinel");
             Require(conflict.SelectedScheme == AuthenticationSchemes.Basic, "Windows must select Basic for admin authority");
             Require(conflict.SelectorUserHost.StartsWith("admin.test", StringComparison.OrdinalIgnoreCase),
@@ -236,6 +244,7 @@ class Program
         else
         {
             Require(conflict.FirstLine.Contains("200"), "managed HttpListener conflict request should reach context");
+            Require(!conflict.HasBasicChallenge, "managed vulnerable mismatch must omit Basic challenge");
             Require(conflict.ContextDelivered, "managed HttpListener must deliver conflict request to application");
             Require(conflict.SelectedScheme == AuthenticationSchemes.Anonymous,
                 "managed selector must incorrectly choose Anonymous from stale Host field");
