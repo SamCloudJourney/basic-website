@@ -3,9 +3,9 @@
         {
             static int GetFreePort()
             {
-                using var tcp = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                tcp.Bind(new IPEndPoint(IPAddress.Loopback, 0));
-                return ((IPEndPoint)tcp.LocalEndPoint!).Port;
+                using var tcp = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+                tcp.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+                return ((System.Net.IPEndPoint)tcp.LocalEndPoint!).Port;
             }
 
             int publicPort = GetFreePort();
@@ -52,8 +52,8 @@
             Task<HttpListenerContext> publicTask = publicListener.GetContextAsync();
             Task<HttpListenerContext> adminTask = adminListener.GetContextAsync();
 
-            using var client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            await client.ConnectAsync(IPAddress.Loopback, adminPort);
+            using var client = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+            await client.ConnectAsync(System.Net.IPAddress.Loopback, adminPort);
 
             string raw =
                 $"POST http://localhost:{publicPort}/admin/change HTTP/1.1\r\n" +
@@ -62,7 +62,7 @@
                 "Connection: close\r\n" +
                 "\r\n";
 
-            await client.SendAsync(Encoding.ASCII.GetBytes(raw), SocketFlags.None);
+            await client.SendAsync(Encoding.ASCII.GetBytes(raw), System.Net.Sockets.SocketFlags.None);
 
             HttpListenerContext context =
                 await adminTask.WaitAsync(TimeSpan.FromSeconds(5));
