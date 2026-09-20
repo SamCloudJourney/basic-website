@@ -1,0 +1,34 @@
+        [ConditionalFact(typeof(HttpListenerFactory), nameof(HttpListenerFactory.SupportsWildcards))]
+        public async Task AuthenticationSchemeSelector_AbsoluteFormMismatchedHost_AllowsAnonymousAdmin()
+        {
+            using var factory = new HttpListenerFactory("*", path: "");
+            HttpListener listener = factory.GetListener();
+            listener.AuthenticationSchemes = AuthenticationSchemes.None;
+            listener.AuthenticationSchemeSelectorDelegate = request =>
+            {
+                string host = request.UserHostName ?? string.Empty;
+                string hostOnly = host.Split(':')[0];
+                return string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
+                    ? AuthenticationSchemes.Anonymous
+                    : AuthenticationSchemes.Basic;
+            };
+
+            using var client = factory.GetConnectedSocket();
+            string raw =
+                $"GET http://admin.test:{factory.Port}/feature HTTP/1.1\r\n" +
+                "Host: public.test\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+
+            Task<HttpListenerContext> serverTask = listener.GetContextAsync();
+            await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+            HttpListenerContext context = await serverTask;
+            Assert.Null(context.User);
+            Assert.Equal("public.test", context.Request.UserHostName);
+            Assert.Equal("admin.test", context.Request.Url!.Host);
+
+            Console.WriteLine("CURRENT_MAIN_AUTH_SCHEME_BYPASS=CONFIRMED");
+            context.Response.Close();
+        }
+
