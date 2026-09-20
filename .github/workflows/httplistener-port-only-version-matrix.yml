@@ -21,7 +21,12 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          sed -i "s#<TargetFramework>net10.0</TargetFramework>#<TargetFramework>net${{ matrix.tfm }}</TargetFramework>#" httplistener-port-only-version-matrix.csproj
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("httplistener-port-only-version-matrix.csproj")
+          s=p.read_text()
+          p.write_text(s.replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net${{ matrix.tfm }}</TargetFramework>"))
+          PY
           dotnet --info
           dotnet run -c Release
 
@@ -41,6 +46,11 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          sed -i "s#<TargetFramework>net10.0</TargetFramework>#<TargetFramework>net11.0</TargetFramework>#" httplistener-port-only-version-matrix.csproj
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("httplistener-port-only-version-matrix.csproj")
+          s=p.read_text()
+          p.write_text(s.replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net11.0</TargetFramework>"))
+          PY
           dotnet --info
           dotnet run -c Release
