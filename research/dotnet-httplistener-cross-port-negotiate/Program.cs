@@ -129,6 +129,7 @@ class Program
         Require(!controlContext.IsCompletedSuccessfully, "unauthenticated admin control must not deliver context");
 
         adminListener.Close();
+        publicListener.Close();
 
         // Fresh listeners for attack so no pending control operation can contaminate the observation.
         using var publicListener2 = new HttpListener();
