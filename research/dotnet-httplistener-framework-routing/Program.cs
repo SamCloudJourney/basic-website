@@ -64,7 +64,7 @@ class Program
         using var adminListener = new HttpListener();
 
         publicListener.Prefixes.Add($"http://public.test:{port}/");
-        adminListener.Prefixes.Add($"http://admin.test:{port}/");
+        adminListener.Prefixes.Add($"http://admin.test:{port}/admin/");
 
         publicListener.AuthenticationSchemes = AuthenticationSchemes.Anonymous;
 
@@ -129,7 +129,7 @@ class Program
                 $"ADMIN_CONTEXT case={name} UserHostName={ctx.Request.UserHostName} Url.Host={ctx.Request.Url?.Host} User={(ctx.User is null ? "ANONYMOUS" : "AUTHENTICATED")}");
             bool executeAdminAction =
                 string.Equals(ctx.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(ctx.Request.Url?.AbsolutePath, "/admin-action", StringComparison.Ordinal);
+                string.Equals(ctx.Request.Url?.AbsolutePath, "/admin/action", StringComparison.Ordinal);
 
             string payload = AdminSentinel + "\n";
             if (executeAdminAction)
@@ -174,19 +174,19 @@ class Program
 
         CaseResult adminControl = await RunCase(
             "ADMIN_CONTROL",
-            p => $"GET / HTTP/1.1\r\nHost: admin.test:{p}\r\nConnection: close\r\n\r\n");
+            p => $"GET /admin/ HTTP/1.1\r\nHost: admin.test:{p}\r\nConnection: close\r\n\r\n");
 
         CaseResult conflict = await RunCase(
             "ABSOLUTE_ADMIN_HOST_PUBLIC",
-            p => $"GET http://admin.test:{p}/ HTTP/1.1\r\nHost: public.test:{p}\r\nConnection: close\r\n\r\n");
+            p => $"GET http://admin.test:{p}/admin/ HTTP/1.1\r\nHost: public.test:{p}\r\nConnection: close\r\n\r\n");
 
         CaseResult adminActionControl = await RunCase(
             "ADMIN_ACTION_CONTROL",
-            p => $"POST /admin-action HTTP/1.1\r\nHost: admin.test:{p}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            p => $"POST /admin/action HTTP/1.1\r\nHost: admin.test:{p}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
 
         CaseResult adminActionConflict = await RunCase(
             "ABSOLUTE_ADMIN_ACTION_HOST_PUBLIC",
-            p => $"POST http://admin.test:{p}/admin-action HTTP/1.1\r\nHost: public.test:{p}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+            p => $"POST http://admin.test:{p}/admin/action HTTP/1.1\r\nHost: public.test:{p}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
 
         Require(publicControl.FirstLine.Contains("200"), "public control must return 200");
         Require(publicControl.PublicContext && !publicControl.AdminContext, "public control must route to public listener");
@@ -238,6 +238,7 @@ class Program
                 "protected admin state-changing action must execute anonymously");
 
             Console.WriteLine("FRAMEWORK_PREFIX_ROUTING_AUTH_BYPASS=CONFIRMED");
+            Console.WriteLine("FRAMEWORK_HOST_AND_PATH_PREFIX_AUTH_BYPASS=CONFIRMED");
             Console.WriteLine("FRAMEWORK_PREFIX_ADMIN_STATE_CHANGE_BYPASS=CONFIRMED");
         }
     }
