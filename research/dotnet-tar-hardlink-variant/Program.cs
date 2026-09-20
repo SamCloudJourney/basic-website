@@ -50,6 +50,42 @@ class Program
         return tar;
     }
 
+
+    static string CreateDeepVariantTar(string root)
+    {
+        string tar = Path.Combine(root, "deep-variant.tar");
+        using FileStream fs = File.Create(tar);
+        using TarWriter writer = new TarWriter(fs, leaveOpen:false);
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "d1/"));
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "d1/d2/"));
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "d1/d2/d3/"));
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "d1/d2/d3/d4/"));
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "d1/d2/d3/outside2/"));
+
+        byte[] safeBytes = Encoding.UTF8.GetBytes("DEEP_SAFE_INSIDE");
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.RegularFile, "d1/d2/d3/outside2/secret")
+        {
+            DataStream = new MemoryStream(safeBytes, writable:false)
+        });
+
+        // Safe at d1/d2/d3/d4/s:
+        //   ../../../outside2/secret -> d1/outside2/secret? Need 1 level less.
+        // Use ../outside2/secret from d4: d1/d2/d3/outside2/secret (inside).
+        // Rebased at dest/escape2: ../outside2/secret -> sibling outside destination root.
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.SymbolicLink, "d1/d2/d3/d4/s")
+        {
+            LinkName = "../outside2/secret"
+        });
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.HardLink, "escape2")
+        {
+            LinkName = "d1/d2/d3/d4/s"
+        });
+
+        return tar;
+    }
+
     static void Main()
     {
         Console.WriteLine($"FRAMEWORK={RuntimeInformation.FrameworkDescription}");
@@ -123,6 +159,30 @@ class Program
                 "hard-linked symlink final target must be outside extraction root");
 
             Console.WriteLine("TAR_HARDLINK_REBASED_SYMLINK_ESCAPE=CONFIRMED");
+
+            string outside2Dir = Path.Combine(root, "outside2");
+            Directory.CreateDirectory(outside2Dir);
+            File.WriteAllText(Path.Combine(outside2Dir, "secret"), "OUTSIDE2_SENTINEL_d917");
+
+            string deepDest = Path.Combine(root, "deep-dest");
+            Directory.CreateDirectory(deepDest);
+            string deepTar = CreateDeepVariantTar(root);
+            TarFile.ExtractToDirectory(deepTar, deepDest, overwriteFiles:true);
+
+            string deepSafe = Path.Combine(deepDest, "d1", "d2", "d3", "d4", "s");
+            string deepEscape = Path.Combine(deepDest, "escape2");
+
+            Console.WriteLine($"DEEP_SOURCE_TARGET={new FileInfo(deepSafe).LinkTarget}");
+            Console.WriteLine($"DEEP_ESCAPE_TARGET={new FileInfo(deepEscape).LinkTarget}");
+            Console.WriteLine($"DEEP_SOURCE_READ={File.ReadAllText(deepSafe)}");
+            Console.WriteLine($"DEEP_ESCAPE_READ={File.ReadAllText(deepEscape)}");
+
+            Require(File.ReadAllText(deepSafe) == "DEEP_SAFE_INSIDE",
+                "deep source symlink must resolve to contained file before hardlink rebase");
+            Require(File.ReadAllText(deepEscape) == "OUTSIDE2_SENTINEL_d917",
+                "rebased deep symlink must access second researcher-controlled outside path");
+
+            Console.WriteLine("TAR_HARDLINK_REBASE_GENERALITY=CONFIRMED");
         }
         finally
         {
