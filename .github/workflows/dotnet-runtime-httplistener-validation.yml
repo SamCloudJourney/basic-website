@@ -66,6 +66,13 @@ jobs:
           git checkout 12921b1d8c6865a774232de9379133020ad23d79
           echo "RUNTIME_SOURCE_HEAD=$(git rev-parse HEAD)"
 
+      - name: Install runtime native build prerequisites
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libkrb5-dev
+
       - name: Inject authority invariant regression
         shell: bash
         run: |
