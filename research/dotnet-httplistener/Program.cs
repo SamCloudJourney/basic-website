@@ -84,7 +84,24 @@ class Program
         {
             HttpListenerContext ctx = await listener.GetContextAsync();
             string[]? hosts = ctx.Request.Headers.GetValues("Host");
-            string line = $"BACKEND_CONTEXT HOST={ctx.Request.UserHostName} URLHOST={ctx.Request.Url?.Host} HOSTVALUES={string.Join("|", hosts ?? Array.Empty<string>())} METHOD={ctx.Request.HttpMethod} RAWURL={ctx.Request.RawUrl} ABSPATH={ctx.Request.Url?.AbsolutePath} LOCALPATH={ctx.Request.Url?.LocalPath}";
+            string parsedBody = "";
+            string bodyStatus = "NOT_READ";
+            if (ctx.Request.HasEntityBody)
+            {
+                try
+                {
+                    using var bodyMs = new MemoryStream();
+                    await ctx.Request.InputStream.CopyToAsync(bodyMs).WaitAsync(TimeSpan.FromSeconds(5));
+                    parsedBody = Encoding.ASCII.GetString(bodyMs.ToArray());
+                    bodyStatus = "OK";
+                }
+                catch (Exception ex)
+                {
+                    bodyStatus = "ERROR:" + ex.GetType().Name;
+                }
+            }
+
+            string line = $"BACKEND_CONTEXT HOST={ctx.Request.UserHostName} URLHOST={ctx.Request.Url?.Host} HOSTVALUES={string.Join("|", hosts ?? Array.Empty<string>())} METHOD={ctx.Request.HttpMethod} RAWURL={ctx.Request.RawUrl} ABSPATH={ctx.Request.Url?.AbsolutePath} LOCALPATH={ctx.Request.Url?.LocalPath} BODYSTATUS={bodyStatus} BODY={parsedBody}";
             Console.WriteLine(line);
             Console.Out.Flush();
 
