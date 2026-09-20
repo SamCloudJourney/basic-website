@@ -1,0 +1,21 @@
+name: HttpListener absolute-form port authority differential
+on:
+  push:
+    branches:
+      - research/dotnet-httplistener-authority-port-20260920
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - working-directory: research/dotnet-httplistener-port
+        run: dotnet run -c Release
