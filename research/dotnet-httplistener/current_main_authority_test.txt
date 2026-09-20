@@ -1,0 +1,23 @@
+        [ConditionalFact(typeof(HttpListenerFactory), nameof(HttpListenerFactory.SupportsWildcards))]
+        public async Task AbsoluteFormMismatchedHost_ExposesConflictingAuthority()
+        {
+            using var factory = new HttpListenerFactory("*", path: "");
+            using Socket client = factory.GetConnectedSocket();
+
+            string raw =
+                $"GET http://admin.test:{factory.Port}/authority HTTP/1.1\r\n" +
+                "Host: public.test\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+
+            await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+            HttpListenerContext context = await factory.GetListener().GetContextAsync();
+            Assert.Equal("public.test", context.Request.Headers["Host"]);
+            Assert.Equal("public.test", context.Request.UserHostName);
+            Assert.Equal("admin.test", context.Request.Url!.Host);
+
+            Console.WriteLine("CURRENT_MAIN_AUTHORITY_CONFUSION=CONFIRMED");
+            context.Response.Close();
+        }
+
