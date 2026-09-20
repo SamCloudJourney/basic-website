@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y libkrb5-dev
+          sudo apt-get install -y libkrb5-dev liblttng-ust-dev
 
       - name: Inject authority and authentication regressions
         shell: bash
