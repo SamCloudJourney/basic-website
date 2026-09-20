@@ -1,0 +1,321 @@
+
+        [Fact]
+        public async Task AuthenticationSchemeSelector_AbsoluteFormMismatchedHost_ExactHostPrefixRoutesAdminListener()
+        {
+            static int ReservePort()
+            {
+                var reserve = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+                reserve.Start();
+                int port = ((System.Net.IPEndPoint)reserve.LocalEndpoint).Port;
+                reserve.Stop();
+                return port;
+            }
+
+            static System.Net.Sockets.Socket ConnectLoopback(int port)
+            {
+                var socket = new System.Net.Sockets.Socket(
+                    System.Net.Sockets.AddressFamily.InterNetwork,
+                    System.Net.Sockets.SocketType.Stream,
+                    System.Net.Sockets.ProtocolType.Tcp);
+                socket.Connect(System.Net.IPAddress.Loopback, port);
+                return socket;
+            }
+
+            static async Task<string> ReceiveWireAsync(System.Net.Sockets.Socket client)
+            {
+                byte[] buffer = new byte[4096];
+                using var ms = new System.IO.MemoryStream();
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+                try
+                {
+                    while (true)
+                    {
+                        int n = await client.ReceiveAsync(buffer.AsMemory(), System.Net.Sockets.SocketFlags.None, cts.Token);
+                        if (n == 0) break;
+                        await ms.WriteAsync(buffer.AsMemory(0, n), cts.Token);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                return Encoding.ASCII.GetString(ms.ToArray());
+            }
+
+            static AuthenticationSchemes SelectByAuthority(HttpListenerRequest request)
+            {
+                string host = request.UserHostName ?? string.Empty;
+                string hostOnly = host.Split(':')[0];
+                return string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
+                    ? AuthenticationSchemes.Anonymous
+                    : AuthenticationSchemes.Basic;
+            }
+
+            // Exact-prefix public control: framework routes to the public listener.
+            {
+                int port = ReservePort();
+                using var publicListener = new HttpListener();
+                using var adminListener = new HttpListener();
+                publicListener.Prefixes.Add($"http://public.test:{port}/");
+                adminListener.Prefixes.Add($"http://admin.test:{port}/");
+                publicListener.AuthenticationSchemes = AuthenticationSchemes.None;
+                adminListener.AuthenticationSchemes = AuthenticationSchemes.None;
+                publicListener.AuthenticationSchemeSelectorDelegate = SelectByAuthority;
+                adminListener.AuthenticationSchemeSelectorDelegate = SelectByAuthority;
+                publicListener.Start();
+                adminListener.Start();
+
+                Task<HttpListenerContext> publicTask = publicListener.GetContextAsync();
+                Task<HttpListenerContext> adminTask = adminListener.GetContextAsync();
+                using var client = ConnectLoopback(port);
+
+                string raw =
+                    "POST /public-action HTTP/1.1\r\n" +
+                    "Host: public.test\r\n" +
+                    "Content-Length: 0\r\n" +
+                    "Connection: close\r\n\r\n";
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                HttpListenerContext context = await publicTask.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.False(adminTask.IsCompletedSuccessfully);
+                Assert.Null(context.User);
+                Assert.Equal("public.test", context.Request.UserHostName);
+                Assert.Equal("public.test", context.Request.Url!.Host);
+
+                byte[] body = Encoding.ASCII.GetBytes("EXACT_PREFIX_PUBLIC_CONTROL\n");
+                context.Response.StatusCode = 200;
+                context.Response.ContentLength64 = body.Length;
+                await context.Response.OutputStream.WriteAsync(body);
+                context.Response.Close();
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.Contains("200", wire);
+                Assert.DoesNotContain("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Console.WriteLine("CURRENT_MAIN_EXACT_PREFIX_PUBLIC_LISTENER_CONTROL=PASS");
+            }
+
+            // Exact-prefix admin control: framework routes to the admin listener and Basic blocks delivery.
+            {
+                int port = ReservePort();
+                using var publicListener = new HttpListener();
+                using var adminListener = new HttpListener();
+                publicListener.Prefixes.Add($"http://public.test:{port}/");
+                adminListener.Prefixes.Add($"http://admin.test:{port}/");
+                publicListener.AuthenticationSchemes = AuthenticationSchemes.None;
+                adminListener.AuthenticationSchemes = AuthenticationSchemes.None;
+                publicListener.Realm = "public-research";
+                adminListener.Realm = "admin-research";
+                publicListener.AuthenticationSchemeSelectorDelegate = SelectByAuthority;
+
+                int adminSelectorCalls = 0;
+                AuthenticationSchemes adminSelected = AuthenticationSchemes.None;
+                adminListener.AuthenticationSchemeSelectorDelegate = request =>
+                {
+                    System.Threading.Interlocked.Increment(ref adminSelectorCalls);
+                    adminSelected = SelectByAuthority(request);
+                    Console.WriteLine($"CURRENT_MAIN_EXACT_ADMIN_CONTROL_SELECTOR UserHostName={request.UserHostName} Url.Host={request.Url?.Host} Selected={adminSelected}");
+                    return adminSelected;
+                };
+
+                publicListener.Start();
+                adminListener.Start();
+
+                Task<HttpListenerContext> publicTask = publicListener.GetContextAsync();
+                Task<HttpListenerContext> adminTask = adminListener.GetContextAsync();
+                using var client = ConnectLoopback(port);
+
+                string raw =
+                    "POST /admin-action HTTP/1.1\r\n" +
+                    "Host: admin.test\r\n" +
+                    "Content-Length: 0\r\n" +
+                    "Connection: close\r\n\r\n";
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.Contains("401", wire);
+                Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(1, adminSelectorCalls);
+                Assert.Equal(AuthenticationSchemes.Basic, adminSelected);
+                Assert.False(publicTask.IsCompletedSuccessfully);
+                Assert.False(adminTask.IsCompletedSuccessfully);
+                Console.WriteLine("CURRENT_MAIN_EXACT_PREFIX_ADMIN_LISTENER_BASIC_CONTROL=PASS");
+            }
+
+            // Attack: request-target selects the exact admin.test prefix/listener, while stale Host
+            // makes that selected admin listener's authentication delegate choose Anonymous.
+            {
+                int port = ReservePort();
+                using var publicListener = new HttpListener();
+                using var adminListener = new HttpListener();
+                publicListener.Prefixes.Add($"http://public.test:{port}/");
+                adminListener.Prefixes.Add($"http://admin.test:{port}/");
+                publicListener.AuthenticationSchemes = AuthenticationSchemes.None;
+                adminListener.AuthenticationSchemes = AuthenticationSchemes.None;
+                publicListener.Realm = "public-research";
+                adminListener.Realm = "admin-research";
+
+                int publicSelectorCalls = 0;
+                int adminSelectorCalls = 0;
+                AuthenticationSchemes adminSelected = AuthenticationSchemes.None;
+                publicListener.AuthenticationSchemeSelectorDelegate = request =>
+                {
+                    System.Threading.Interlocked.Increment(ref publicSelectorCalls);
+                    return SelectByAuthority(request);
+                };
+                adminListener.AuthenticationSchemeSelectorDelegate = request =>
+                {
+                    System.Threading.Interlocked.Increment(ref adminSelectorCalls);
+                    adminSelected = SelectByAuthority(request);
+                    Console.WriteLine($"CURRENT_MAIN_EXACT_ATTACK_ADMIN_SELECTOR UserHostName={request.UserHostName} Url.Host={request.Url?.Host} Selected={adminSelected}");
+                    return adminSelected;
+                };
+
+                publicListener.Start();
+                adminListener.Start();
+
+                Task<HttpListenerContext> publicTask = publicListener.GetContextAsync();
+                Task<HttpListenerContext> adminTask = adminListener.GetContextAsync();
+                using var client = ConnectLoopback(port);
+
+                string raw =
+                    $"POST http://admin.test:{port}/admin-action HTTP/1.1\r\n" +
+                    "Host: public.test\r\n" +
+                    "Content-Length: 0\r\n" +
+                    "Connection: close\r\n\r\n";
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                HttpListenerContext context = await adminTask.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.False(publicTask.IsCompletedSuccessfully);
+                Assert.Equal(0, publicSelectorCalls);
+                Assert.Equal(1, adminSelectorCalls);
+                Assert.Equal(AuthenticationSchemes.Anonymous, adminSelected);
+                Assert.Null(context.User);
+                Assert.Equal("public.test", context.Request.UserHostName);
+                Assert.Equal("admin.test", context.Request.Url!.Host);
+
+                bool adminAction = true;
+                byte[] body = Encoding.ASCII.GetBytes(
+                    "EXACT_PREFIX_ADMIN_LISTENER_SENTINEL_82d1\n" +
+                    "ADMIN_ACTION_EXECUTED=true\n");
+                context.Response.StatusCode = 200;
+                context.Response.ContentLength64 = body.Length;
+                await context.Response.OutputStream.WriteAsync(body);
+                context.Response.Close();
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.True(adminAction);
+                Assert.Contains("200", wire);
+                Assert.DoesNotContain("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("EXACT_PREFIX_ADMIN_LISTENER_SENTINEL_82d1", wire);
+                Console.WriteLine("CURRENT_MAIN_EXACT_PREFIX_ADMIN_LISTENER_AUTH_BYPASS=CONFIRMED");
+            }
+        }
+
+        [Fact]
+        public async Task AuthenticationSchemeSelector_AbsoluteFormAuthorityCanonicalizationGuard_ExactHostPrefixBlocksAdminListener()
+        {
+            static int ReservePort()
+            {
+                var reserve = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+                reserve.Start();
+                int port = ((System.Net.IPEndPoint)reserve.LocalEndpoint).Port;
+                reserve.Stop();
+                return port;
+            }
+
+            static System.Net.Sockets.Socket ConnectLoopback(int port)
+            {
+                var socket = new System.Net.Sockets.Socket(
+                    System.Net.Sockets.AddressFamily.InterNetwork,
+                    System.Net.Sockets.SocketType.Stream,
+                    System.Net.Sockets.ProtocolType.Tcp);
+                socket.Connect(System.Net.IPAddress.Loopback, port);
+                return socket;
+            }
+
+            static async Task<string> ReceiveWireAsync(System.Net.Sockets.Socket client)
+            {
+                byte[] buffer = new byte[4096];
+                using var ms = new System.IO.MemoryStream();
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+                try
+                {
+                    while (true)
+                    {
+                        int n = await client.ReceiveAsync(buffer.AsMemory(), System.Net.Sockets.SocketFlags.None, cts.Token);
+                        if (n == 0) break;
+                        await ms.WriteAsync(buffer.AsMemory(0, n), cts.Token);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+                return Encoding.ASCII.GetString(ms.ToArray());
+            }
+
+            static AuthenticationSchemes SelectByAuthority(HttpListenerRequest request)
+            {
+                string host = request.UserHostName ?? string.Empty;
+                string hostOnly = host.Split(':')[0];
+                return string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
+                    ? AuthenticationSchemes.Anonymous
+                    : AuthenticationSchemes.Basic;
+            }
+
+            int port = ReservePort();
+            using var publicListener = new HttpListener();
+            using var adminListener = new HttpListener();
+            publicListener.Prefixes.Add($"http://public.test:{port}/");
+            adminListener.Prefixes.Add($"http://admin.test:{port}/");
+            publicListener.AuthenticationSchemes = AuthenticationSchemes.None;
+            adminListener.AuthenticationSchemes = AuthenticationSchemes.None;
+            publicListener.Realm = "public-research";
+            adminListener.Realm = "admin-research";
+
+            int publicSelectorCalls = 0;
+            int adminSelectorCalls = 0;
+            AuthenticationSchemes adminSelected = AuthenticationSchemes.None;
+            string adminUserHost = "<not-called>";
+            string adminUrlHost = "<not-called>";
+
+            publicListener.AuthenticationSchemeSelectorDelegate = request =>
+            {
+                System.Threading.Interlocked.Increment(ref publicSelectorCalls);
+                return SelectByAuthority(request);
+            };
+            adminListener.AuthenticationSchemeSelectorDelegate = request =>
+            {
+                System.Threading.Interlocked.Increment(ref adminSelectorCalls);
+                adminUserHost = request.UserHostName ?? "<null>";
+                adminUrlHost = request.Url?.Host ?? "<null>";
+                adminSelected = SelectByAuthority(request);
+                Console.WriteLine($"EXPERIMENTAL_EXACT_GUARD_ADMIN_SELECTOR UserHostName={adminUserHost} Url.Host={adminUrlHost} Selected={adminSelected}");
+                return adminSelected;
+            };
+
+            publicListener.Start();
+            adminListener.Start();
+
+            Task<HttpListenerContext> publicTask = publicListener.GetContextAsync();
+            Task<HttpListenerContext> adminTask = adminListener.GetContextAsync();
+            using var client = ConnectLoopback(port);
+
+            string raw =
+                $"POST http://admin.test:{port}/admin-action HTTP/1.1\r\n" +
+                "Host: public.test\r\n" +
+                "Content-Length: 0\r\n" +
+                "Connection: close\r\n\r\n";
+            await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+            string wire = await ReceiveWireAsync(client);
+            Assert.Contains("401", wire);
+            Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(0, publicSelectorCalls);
+            Assert.Equal(1, adminSelectorCalls);
+            Assert.Equal(AuthenticationSchemes.Basic, adminSelected);
+            Assert.StartsWith("admin.test", adminUserHost, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("admin.test", adminUrlHost);
+            Assert.False(publicTask.IsCompletedSuccessfully);
+            Assert.False(adminTask.IsCompletedSuccessfully);
+            Console.WriteLine("EXPERIMENTAL_EXACT_PREFIX_ADMIN_LISTENER_GUARD=BLOCKS_BYPASS");
+        }
+
