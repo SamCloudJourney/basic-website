@@ -17,6 +17,8 @@ static async Task<string> ReadWire(Socket s)
 
 int adminPort=ReservePort(), publicPort=ReservePort();
 while(publicPort==adminPort) publicPort=ReservePort();
+string stateMarker=Path.Combine(Path.GetTempPath(), $"httplistener-port-admin-{Guid.NewGuid():N}.txt");
+try { File.Delete(stateMarker); } catch {}
 Console.WriteLine($"OS={Environment.OSVersion}");
 Console.WriteLine($"FRAMEWORK={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
 Console.WriteLine($"ADMIN_PORT={adminPort} PUBLIC_PORT={publicPort}");
@@ -58,7 +60,8 @@ async Task<(HttpListener pub,HttpListener adm)> StartPair()
     if(!ReferenceEquals(first,wt))throw new Exception("admin control context delivered");
     string wire=await wt;
     if(!wire.Contains("401")||!wire.Contains("WWW-Authenticate: Basic",StringComparison.OrdinalIgnoreCase))throw new Exception("admin control no Basic 401");
-    Console.WriteLine($"PORT_ONLY_ADMIN_CONTROL=PASS STATUS_401=True PUBLIC_CONTEXT={pt.IsCompletedSuccessfully} ADMIN_CONTEXT={at.IsCompletedSuccessfully}");
+    if(File.Exists(stateMarker))throw new Exception("protected state marker exists after blocked admin control");
+    Console.WriteLine($"PORT_ONLY_ADMIN_CONTROL=PASS STATUS_401=True PUBLIC_CONTEXT={pt.IsCompletedSuccessfully} ADMIN_CONTEXT={at.IsCompletedSuccessfully} MARKER_EXISTS={File.Exists(stateMarker)}");
 }
 
 // Attack has NO Host-vs-request-target mismatch: both say the public port.
@@ -89,6 +92,9 @@ async Task<(HttpListener pub,HttpListener adm)> StartPair()
     if(pc!=0||ac!=1||chosen!=AuthenticationSchemes.Anonymous||ctx.User is not null)throw new Exception("port-only bypass invariant failed");
     if(ctx.Request.Url?.Port!=adminPort)throw new Exception("Url port was not rewritten to local admin port");
     if(!string.Equals(ctx.Request.UserHostName,$"127.0.0.1:{publicPort}",StringComparison.OrdinalIgnoreCase))throw new Exception("selector did not retain public authority");
+    string sentinel="PORT_ONLY_PROTECTED_STATE_CHANGED_91e7";
+    await File.WriteAllTextAsync(stateMarker,sentinel);
+    if(!File.Exists(stateMarker)||await File.ReadAllTextAsync(stateMarker)!=sentinel)throw new Exception("protected state mutation failed");
     byte[] body=Encoding.ASCII.GetBytes("PORT_ONLY_ADMIN_ACTION_EXECUTED=true\n");
     ctx.Response.StatusCode=200;ctx.Response.ContentLength64=body.Length;await ctx.Response.OutputStream.WriteAsync(body);ctx.Response.Close();
     string wire=await wt;
@@ -97,6 +103,8 @@ async Task<(HttpListener pub,HttpListener adm)> StartPair()
         $"PORT_ONLY_AUTH_BYPASS=CONFIRMED WIRE_HOST_EQUALS_TARGET_AUTHORITY=True TCP_DESTINATION_PORT={adminPort} " +
         $"RAW_TARGET_PORT={publicPort} USERHOST={ctx.Request.UserHostName} URLAUTHORITY={ctx.Request.Url?.Authority} " +
         $"ROUTED_LISTENER=ADMIN SELECTED={chosen} USER=ANONYMOUS STATUS_200=True BASIC_CHALLENGE=False " +
-        $"PUBLIC_SELECTOR_CALLS={pc} ADMIN_SELECTOR_CALLS={ac}");
+        $"PUBLIC_SELECTOR_CALLS={pc} ADMIN_SELECTOR_CALLS={ac} MARKER_EXISTS={File.Exists(stateMarker)} " +
+        $"MARKER_CONTENT={await File.ReadAllTextAsync(stateMarker)}");
 }
 Console.WriteLine("PORT_ONLY_AUTHORITY_BYPASS_MATRIX=PASS");
+try { File.Delete(stateMarker); } catch {}
