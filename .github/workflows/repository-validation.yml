@@ -1,4 +1,4 @@
-name: Repository validation
+name: VS Code localhost redirect integration
 
 on:
   push:
@@ -10,178 +10,120 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
-    env:
-      VSCODE_SHA: 832cf23c5887351668f61c8648eb9c2ec6ee7d23
-      TEST_FILE: src/vs/platform/agentHost/test/node/gitDiffOutputAutoApprove.regression.test.ts
-      RULE_FILE: src/vs/platform/terminal/common/autoApprove/gitAutoApproveRules.ts
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24.20.0
 
-      - name: Checkout target
+      - name: Checkout current VS Code main
         run: |
           set -euxo pipefail
-          git clone --filter=blob:none https://github.com/microsoft/vscode.git vscode
+          git clone --depth=1 https://github.com/microsoft/vscode.git vscode
           cd vscode
-          git checkout "$VSCODE_SHA"
-          test "$(git rev-parse HEAD)" = "$VSCODE_SHA"
-          printf 'SHA=%s\nNODE=%s\nNPM=%s\nGIT=%s\n' "$(git rev-parse HEAD)" "$(node -v)" "$(npm -v)" "$(git --version)"
+          echo "VSCODE_HEAD=$(git rev-parse HEAD)"
 
-      - name: Install native prerequisites
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libkrb5-dev libx11-dev libxkbfile-dev pkg-config
-
-      - name: Install and transpile
-        working-directory: vscode
-        run: |
-          set -euxo pipefail
+          sudo apt-get install -y xvfb libkrb5-dev libx11-dev libxkbfile-dev pkg-config libgtk-3-0 libnss3 libasound2t64
+          cd vscode
           npm ci --no-audit --no-fund
           npm run transpile-client
 
-      - name: Add real permission regression
+      - name: Write focused integration harness
         working-directory: vscode
         run: |
-          cat > "$TEST_FILE" <<'EOF'
-          import assert from 'assert';
-          import { mkdtempSync, realpathSync, rmSync } from 'fs';
-          import { tmpdir } from 'os';
-          import { DisposableStore } from '../../../../base/common/lifecycle.js';
-          import { join } from '../../../../base/common/path.js';
-          import { URI } from '../../../../base/common/uri.js';
-          import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
-          import { NullLogService } from '../../../log/common/log.js';
-          import { SessionStatus, ToolCallConfirmationReason, type SessionSummary } from '../../common/state/sessionState.js';
-          import { AgentConfigurationService } from '../../node/agentConfigurationService.js';
-          import { AgentHostStateManager } from '../../node/agentHostStateManager.js';
-          import { CommandAutoApprover } from '../../node/commandAutoApprover.js';
-          import { SessionPermissionManager, type IToolApprovalEvent } from '../../node/sessionPermissions.js';
-          import { createSessionDataService } from '../common/sessionTestHelpers.js';
+          cat > /tmp/vscode-localhost-redirect.mjs <<'EOF'
+          import http from 'node:http';
+          import os from 'node:os';
+          import assert from 'node:assert/strict';
+          import { app, BrowserWindow } from 'electron';
+          import { WebPageLoader } from './out/vs/platform/webContentExtractor/electron-main/webPageLoader.js';
+          import { URI } from './out/vs/base/common/uri.js';
+          import { isURLDomainTrusted } from './out/vs/platform/url/common/trustedDomains.js';
 
-          suite('git diff output permission regression', () => {
-            const disposables = new DisposableStore();
-            const sessionUri = URI.from({ scheme: 'copilot', path: '/git-diff-output' }).toString();
-            let manager: AgentHostStateManager;
-            let configService: AgentConfigurationService;
-            let permissions: SessionPermissionManager;
-            let workDir: string;
-            let outsideDir: string;
+          const interfaces = os.networkInterfaces();
+          const nonLoopback = Object.values(interfaces).flat().find(x => x && x.family === 'IPv4' && !x.internal)?.address;
+          if (!nonLoopback) throw new Error('No non-loopback IPv4 address');
+          const hits = { loopback: 0, control: 0 };
 
-            function shellEvent(commandLine: string): IToolApprovalEvent {
-              return { toolCallId: 'tc', session: URI.parse(sessionUri), permissionKind: 'shell', toolInput: commandLine, shellLanguage: 'bash' };
-            }
+          function listen(server, host='0.0.0.0') {
+            return new Promise(resolve => server.listen(0, host, () => resolve(server.address().port)));
+          }
+          function close(server) { return new Promise(resolve => server.close(resolve)); }
 
-            setup(async () => {
-              workDir = realpathSync(mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), 'vscode-work-')));
-              outsideDir = realpathSync(mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), 'vscode-out-')));
-              manager = disposables.add(new AgentHostStateManager(new NullLogService()));
-              configService = disposables.add(new AgentConfigurationService(manager, new NullLogService()));
-              permissions = disposables.add(new SessionPermissionManager(manager, {}, configService, new NullLogService(), createSessionDataService()));
-              await permissions.initialize();
-              const now = new Date().toISOString();
-              const summary: SessionSummary = {
-                resource: sessionUri, provider: 'copilot', title: 'repro', status: SessionStatus.Idle,
-                createdAt: now, modifiedAt: now, project: { uri: 'file:///project', displayName: 'Project' },
-                workingDirectories: [URI.file(workDir).toString()]
-              };
-              manager.createSession(summary);
-            });
-
-            teardown(() => {
-              disposables.clear();
-              rmSync(workDir, { recursive: true, force: true });
-              rmSync(outsideDir, { recursive: true, force: true });
-            });
-            ensureNoDisposablesAreLeakedInTestSuite();
-
-            test('differential', async () => {
-              const p = join(outsideDir, 'proof.patch');
-              const approver = disposables.add(new CommandAutoApprover(new NullLogService()));
-              await approver.initialize();
-              const commands = {
-                plain: 'git diff HEAD',
-                diffEq: `git diff --output="${p}" HEAD`,
-                diffSpace: `git diff --output "${p}" HEAD`,
-                redirect: `git diff HEAD > "${p}"`,
-                log: `git log --output="${p}" -1`,
-                show: `git show --output="${p}" HEAD`
-              };
-              const rule = {
-                plain: approver.shouldAutoApprove(commands.plain),
-                diffEq: approver.shouldAutoApprove(commands.diffEq),
-                diffSpace: approver.shouldAutoApprove(commands.diffSpace),
-                log: approver.shouldAutoApprove(commands.log),
-                show: approver.shouldAutoApprove(commands.show)
-              };
-              const conv = (v: unknown) => v === ToolCallConfirmationReason.NotNeeded ? 'not-needed' : v === undefined ? 'confirmation-required' : String(v);
-              const permission = {
-                plain: conv(await permissions.getAutoApproval(shellEvent(commands.plain), sessionUri)),
-                diffEq: conv(await permissions.getAutoApproval(shellEvent(commands.diffEq), sessionUri)),
-                diffSpace: conv(await permissions.getAutoApproval(shellEvent(commands.diffSpace), sessionUri)),
-                redirect: conv(await permissions.getAutoApproval(shellEvent(commands.redirect), sessionUri)),
-                log: conv(await permissions.getAutoApproval(shellEvent(commands.log), sessionUri)),
-                show: conv(await permissions.getAutoApproval(shellEvent(commands.show), sessionUri))
-              };
-              console.log('RULE_LAYER=' + JSON.stringify(rule));
-              console.log('PERMISSION_LAYER=' + JSON.stringify(permission));
-              assert.strictEqual(rule.plain, 'approved');
-            });
+          const target = http.createServer((req,res) => {
+            hits.loopback++;
+            res.writeHead(200, {'content-type':'text/html'});
+            res.end('<html><body><main>LOOPBACK_SENTINEL_8f291 '.repeat(20) + '</main></body></html>');
           });
+          const controlTarget = http.createServer((req,res) => {
+            hits.control++;
+            res.writeHead(200, {'content-type':'text/html'});
+            res.end('<html><body><main>CONTROL_SENTINEL '.repeat(20) + '</main></body></html>');
+          });
+          const targetPort = await listen(target, '127.0.0.1');
+          const controlPort = await listen(controlTarget, '0.0.0.0');
+
+          const source = http.createServer((req,res) => {
+            const u = new URL(req.url, 'http://x');
+            const dest = u.pathname === '/candidate'
+              ? `http://127.0.0.1:${targetPort}/secret`
+              : `http://${nonLoopback}:${controlPort}/blocked`;
+            res.writeHead(302, { location: dest });
+            res.end();
+          });
+          const sourcePort = await listen(source, '0.0.0.0');
+
+          const logger = { trace(){}, info(){}, warn(){}, error(){}, debug(){}, flush(){} };
+          const networkFilter = { isUriAllowed(){ return true; }, formatError(uri){ return 'blocked:' + uri.toString(); } };
+
+          async function extract(path) {
+            const uri = URI.parse(`http://${nonLoopback}:${sourcePort}${path}`);
+            const loader = new WebPageLoader(
+              options => new BrowserWindow(options),
+              logger,
+              uri,
+              undefined,
+              u => isURLDomainTrusted(u, []),
+              networkFilter
+            );
+            try { return await loader.load(); } finally { loader.dispose(); }
+          }
+
+          await app.whenReady();
+          try {
+            console.log('SOURCE_AUTHORITY=' + nonLoopback + ':' + sourcePort);
+            console.log('TARGET_AUTHORITY=127.0.0.1:' + targetPort);
+            console.log('TRUST_LOOPBACK=' + isURLDomainTrusted(URI.parse(`http://127.0.0.1:${targetPort}/secret`), []));
+            console.log('TRUST_CONTROL=' + isURLDomainTrusted(URI.parse(`http://${nonLoopback}:${controlPort}/blocked`), []));
+
+            const candidate = await extract('/candidate');
+            const candidateHits = hits.loopback;
+            const control = await extract('/control');
+
+            console.log('CANDIDATE_RESULT=' + JSON.stringify(candidate));
+            console.log('CONTROL_RESULT=' + JSON.stringify(control));
+            console.log('HITS=' + JSON.stringify(hits));
+
+            assert.equal(isURLDomainTrusted(URI.parse(`http://127.0.0.1:${targetPort}/secret`), []), true);
+            assert.equal(isURLDomainTrusted(URI.parse(`http://${nonLoopback}:${controlPort}/blocked`), []), false);
+            assert.ok(candidateHits > 0, 'loopback redirect target was not contacted');
+            assert.equal(candidate.status, 'ok', 'candidate redirect did not complete');
+            assert.ok(candidate.result.includes('LOOPBACK_SENTINEL_8f291'), 'loopback response was not extracted');
+            assert.equal(hits.control, 0, 'non-trusted redirect target should not be contacted');
+            assert.equal(control.status, 'redirect', 'non-trusted cross-authority redirect should be surfaced instead of followed');
+            console.log('INTEGRATION_VERDICT=PASS');
+          } finally {
+            await Promise.all([close(source), close(target), close(control)]);
+            app.quit();
+          }
           EOF
-          npm run transpile-client
 
-      - name: Baseline and BEFORE
+      - name: Run Electron integration test
         working-directory: vscode
         run: |
           set -euxo pipefail
-          npm run test-node -- --run src/vs/platform/agentHost/test/node/commandAutoApprover.test.ts
-          npm run test-node -- --run src/vs/platform/agentHost/test/node/sessionPermissions.test.ts
-          npm run test-node -- --run "$TEST_FILE"
-
-      - name: Harmless Git sink
-        working-directory: vscode
-        run: |
-          set -euxo pipefail
-          ROOT="$(mktemp -d)"
-          mkdir -p "$ROOT/work" "$ROOT/outside"
-          cd "$ROOT/work"
-          git init
-          git config user.email repro@example.invalid
-          git config user.name Repro
-          printf 'before\n' > f.txt
-          git add f.txt
-          git commit -m base
-          printf 'after\n' >> f.txt
-          printf 'SENTINEL\n' > "$ROOT/outside/proof.patch"
-          git diff --output="$ROOT/outside/proof.patch"
-          test -s "$ROOT/outside/proof.patch"
-          ! grep -q SENTINEL "$ROOT/outside/proof.patch"
-          echo "SINK_SHA256=$(sha256sum "$ROOT/outside/proof.patch" | awk '{print $1}')"
-          head -10 "$ROOT/outside/proof.patch"
-
-      - name: Apply one-line fix
-        working-directory: vscode
-        run: |
-          set -euxo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path("src/vs/platform/terminal/common/autoApprove/gitAutoApproveRules.ts")
-          s=p.read_text()
-          a="\t'/^git(\\\\s+(-(?-i:C)\\\\s+\\\\S+|--no-pager))*\\\\s+diff\\\\b/': true,\n"
-          d="\t'/^git(\\\\s+(-(?-i:C)\\\\s+\\\\S+|--no-pager))*\\\\s+diff\\\\b.*\\\\s--output(=|\\\\s|$)/': false,\n"
-          assert s.count(a)==1
-          p.write_text(s.replace(a,a+d,1))
-          PY
-          git diff -- "$RULE_FILE"
-          npm run transpile-client
-
-      - name: AFTER
-        working-directory: vscode
-        run: |
-          set -euxo pipefail
-          npm run test-node -- --run src/vs/platform/agentHost/test/node/commandAutoApprover.test.ts
-          npm run test-node -- --run src/vs/platform/agentHost/test/node/sessionPermissions.test.ts
-          npm run test-node -- --run "$TEST_FILE"
+          xvfb-run -a ./node_modules/electron/dist/electron --no-sandbox /tmp/vscode-localhost-redirect.mjs
