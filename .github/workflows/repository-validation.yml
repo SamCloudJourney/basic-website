@@ -94,7 +94,13 @@ jobs:
             try { return await loader.load(); } finally { loader.dispose(); }
           }
 
+          const watchdog = setTimeout(() => {
+            console.error('HARNESS_TIMEOUT');
+            app.exit(2);
+            process.exit(2);
+          }, 90000);
           await app.whenReady();
+          let exitCode = 0;
           try {
             console.log('SOURCE_AUTHORITY=' + nonLoopback + ':' + sourcePort);
             console.log('TARGET_AUTHORITY=127.0.0.1:' + targetPort);
@@ -117,9 +123,14 @@ jobs:
             assert.equal(hits.control, 0, 'non-trusted redirect target should not be contacted');
             assert.equal(control.status, 'redirect', 'non-trusted cross-authority redirect should be surfaced instead of followed');
             console.log('INTEGRATION_VERDICT=PASS');
+          } catch (err) {
+            exitCode = 1;
+            console.error('INTEGRATION_ERROR=' + (err?.stack || err));
           } finally {
+            clearTimeout(watchdog);
             await Promise.all([close(source), close(target), close(control)]);
-            app.quit();
+            app.exit(exitCode);
+            process.exit(exitCode);
           }
           EOF
 
@@ -127,4 +138,4 @@ jobs:
         working-directory: vscode
         run: |
           set -euxo pipefail
-          xvfb-run -a ./.build/electron/code-oss --no-sandbox /tmp/vscode-localhost-redirect.mjs
+          timeout 120s xvfb-run -a ./.build/electron/code-oss --no-sandbox /tmp/vscode-localhost-redirect.mjs
