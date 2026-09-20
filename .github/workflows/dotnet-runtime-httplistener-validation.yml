@@ -125,15 +125,8 @@ jobs:
           from pathlib import Path
           p = Path("src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpListenerRequest.Managed.cs")
           s = p.read_text()
-          old = """            if (raw_uri != null)
-                host = raw_uri.Host;
-"""
-          new = """            if (raw_uri != null)
-            {
-                host = raw_uri.Host;
-                Headers.Set(HttpKnownHeaderNames.Host, raw_uri.Authority);
-            }
-"""
+          old = "            if (raw_uri != null)\n                host = raw_uri.Host;\n"
+          new = "            if (raw_uri != null)\n            {\n                host = raw_uri.Host;\n                Headers.Set(HttpKnownHeaderNames.Host, raw_uri.Authority);\n            }\n"
           assert old in s
           p.write_text(s.replace(old, new, 1))
           PY
