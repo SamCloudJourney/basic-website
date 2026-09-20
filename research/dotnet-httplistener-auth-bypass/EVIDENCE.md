@@ -204,3 +204,29 @@ The Windows/http.sys negative control challenges the same request with Basic aut
 
 This demonstrates both confidentiality (protected admin secret retrieval) and integrity (protected admin action execution)
 using synthetic, researcher-controlled resources.
+
+
+## Supported servicing and recent-security-fix distinction
+
+The final proof was run on the latest supported servicing releases available on 2026-09-20:
+
+- .NET 8.0.31
+- .NET 9.0.20
+- .NET 10.0.12
+
+Microsoft's support policy lists those as the current patches as of the September 2026 servicing release.
+
+This finding also survives the recent managed-HttpListener security hardening around request framing.
+The public August 2026 HttpListener advisory/fix addressed Content-Length desynchronization and related
+request-smuggling parsing behavior. The authority-confusion path here does not depend on Content-Length
+parsing, duplicate Content-Length, Transfer-Encoding ambiguity, malformed chunk sizes, or header-name whitespace.
+
+The decisive request is simply an absolute-form request-target whose authority conflicts with the Host field:
+
+```http
+GET http://admin.test:<port>/admin HTTP/1.1
+Host: public.test
+```
+
+The relevant managed authority construction remains present in current runtime source commit
+`12921b1d8c6865a774232de9379133020ad23d79`.
