@@ -31,6 +31,7 @@ jobs:
           cd vscode
           npm ci --no-audit --no-fund
           npm run transpile-client
+          npm run electron
 
       - name: Write focused integration harness
         working-directory: vscode
@@ -126,4 +127,4 @@ jobs:
         working-directory: vscode
         run: |
           set -euxo pipefail
-          xvfb-run -a ./node_modules/electron/dist/electron --no-sandbox /tmp/vscode-localhost-redirect.mjs
+          xvfb-run -a ./.build/electron/code-oss --no-sandbox /tmp/vscode-localhost-redirect.mjs
