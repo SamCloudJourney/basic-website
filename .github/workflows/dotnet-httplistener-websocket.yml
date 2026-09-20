@@ -3,7 +3,7 @@ name: HttpListener protected admin WebSocket auth bypass
 on:
   push:
     branches:
-      - research/dotnet-httplistener-websocket-auth-bypass-20260920
+      - research/dotnet-httplistener-websocket-command-20260920
 
 permissions:
   contents: read
