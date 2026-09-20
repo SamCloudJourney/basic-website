@@ -1,70 +1,329 @@
         [ConditionalFact(typeof(HttpListenerFactory), nameof(HttpListenerFactory.SupportsWildcards))]
-        public async Task AuthenticationSchemeSelector_AbsoluteFormMismatchedHost_AllowsAnonymousAdmin()
+        public async Task AuthenticationSchemeSelector_AbsoluteFormMismatchedHost_FullWireBypass()
         {
-            using var factory = new HttpListenerFactory("*", path: "");
-            HttpListener listener = factory.GetListener();
-            listener.AuthenticationSchemes = AuthenticationSchemes.None;
-            listener.AuthenticationSchemeSelectorDelegate = request =>
+            static async Task<string> ReceiveWireAsync(System.Net.Sockets.Socket client)
+            {
+                byte[] buffer = new byte[4096];
+                using var ms = new System.IO.MemoryStream();
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+                try
+                {
+                    while (true)
+                    {
+                        int n = await client.ReceiveAsync(buffer.AsMemory(), System.Net.Sockets.SocketFlags.None, cts.Token);
+                        if (n == 0)
+                        {
+                            break;
+                        }
+
+                        await ms.WriteAsync(buffer.AsMemory(0, n), cts.Token);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                return Encoding.ASCII.GetString(ms.ToArray());
+            }
+
+            static AuthenticationSchemes SelectScheme(HttpListenerRequest request)
             {
                 string host = request.UserHostName ?? string.Empty;
                 string hostOnly = host.Split(':')[0];
+
                 return string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
                     ? AuthenticationSchemes.Anonymous
                     : AuthenticationSchemes.Basic;
-            };
+            }
 
-            using var client = factory.GetConnectedSocket();
-            string raw =
-                $"GET http://admin.test:{factory.Port}/feature HTTP/1.1\r\n" +
-                "Host: public.test\r\n" +
-                "Connection: close\r\n" +
-                "\r\n";
+            // Control 1: public authority remains anonymous and receives a context.
+            {
+                using var factory = new HttpListenerFactory("*", path: "");
+                HttpListener listener = factory.GetListener();
+                listener.AuthenticationSchemes = AuthenticationSchemes.None;
+                listener.Realm = "admin-research";
+                listener.AuthenticationSchemeSelectorDelegate = SelectScheme;
 
-            Task<HttpListenerContext> serverTask = listener.GetContextAsync();
-            await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+                using var client = factory.GetConnectedSocket();
+                Task<HttpListenerContext> serverTask = listener.GetContextAsync();
 
-            HttpListenerContext context = await serverTask;
-            Assert.Null(context.User);
-            Assert.Equal("public.test", context.Request.UserHostName);
-            Assert.Equal("admin.test", context.Request.Url!.Host);
+                string raw =
+                    $"GET /public HTTP/1.1\r\n" +
+                    "Host: public.test\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
 
-            Console.WriteLine("CURRENT_MAIN_AUTH_SCHEME_BYPASS=CONFIRMED");
-            context.Response.Close();
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                HttpListenerContext context = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Null(context.User);
+                Assert.Equal("public.test", context.Request.UserHostName);
+                Assert.Equal("public.test", context.Request.Url!.Host);
+
+                byte[] body = Encoding.ASCII.GetBytes("PUBLIC_CONTROL\n");
+                context.Response.StatusCode = 200;
+                context.Response.ContentLength64 = body.Length;
+                await context.Response.OutputStream.WriteAsync(body);
+                context.Response.Close();
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.Contains("200", wire);
+                Assert.DoesNotContain("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Console.WriteLine("CURRENT_MAIN_PUBLIC_CONTROL=PASS");
+            }
+
+            // Control 2: the same selector requires Basic for an ordinary admin request.
+            {
+                using var factory = new HttpListenerFactory("*", path: "");
+                HttpListener listener = factory.GetListener();
+                listener.AuthenticationSchemes = AuthenticationSchemes.None;
+                listener.Realm = "admin-research";
+                listener.AuthenticationSchemeSelectorDelegate = SelectScheme;
+
+                using var client = factory.GetConnectedSocket();
+                Task<HttpListenerContext> serverTask = listener.GetContextAsync();
+
+                string raw =
+                    $"GET /admin HTTP/1.1\r\n" +
+                    "Host: admin.test\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
+
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.Contains("401", wire);
+                Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Assert.False(serverTask.IsCompletedSuccessfully);
+
+                listener.Close();
+                Task completed = await Task.WhenAny(serverTask, Task.Delay(TimeSpan.FromSeconds(2)));
+                Assert.Same(serverTask, completed);
+                try { await serverTask; } catch { }
+
+                Console.WriteLine("CURRENT_MAIN_ADMIN_BASIC_CONTROL=PASS");
+            }
+
+            // Attack: request-target authority is admin, received Host says public.
+            // Managed HttpListener exposes both values at once and the framework selector
+            // chooses Anonymous from stale UserHostName before delivering the context.
+            {
+                using var factory = new HttpListenerFactory("*", path: "");
+                HttpListener listener = factory.GetListener();
+                listener.AuthenticationSchemes = AuthenticationSchemes.None;
+                listener.Realm = "admin-research";
+
+                string selectorUserHost = "<not-called>";
+                string selectorUrlHost = "<not-called>";
+                AuthenticationSchemes selected = AuthenticationSchemes.None;
+
+                listener.AuthenticationSchemeSelectorDelegate = request =>
+                {
+                    selectorUserHost = request.UserHostName ?? "<null>";
+                    selectorUrlHost = request.Url?.Host ?? "<null>";
+                    selected = SelectScheme(request);
+
+                    Console.WriteLine(
+                        $"CURRENT_MAIN_SELECTOR UserHostName={selectorUserHost} Url.Host={selectorUrlHost} Selected={selected}");
+
+                    return selected;
+                };
+
+                using var client = factory.GetConnectedSocket();
+                Task<HttpListenerContext> serverTask = listener.GetContextAsync();
+
+                string raw =
+                    $"GET http://admin.test:{factory.Port}/admin HTTP/1.1\r\n" +
+                    "Host: public.test\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
+
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                HttpListenerContext context = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Null(context.User);
+                Assert.Equal(AuthenticationSchemes.Anonymous, selected);
+                Assert.Equal("public.test", selectorUserHost);
+                Assert.Equal("admin.test", selectorUrlHost);
+                Assert.Equal("public.test", context.Request.UserHostName);
+                Assert.Equal("admin.test", context.Request.Url!.Host);
+
+                byte[] body = Encoding.ASCII.GetBytes(
+                    "CURRENT_MAIN_ADMIN_AUTH_BYPASS_SENTINEL_4e91\n" +
+                    "ADMIN_ACTION_EXECUTED=true\n");
+
+                context.Response.StatusCode = 200;
+                context.Response.ContentLength64 = body.Length;
+                await context.Response.OutputStream.WriteAsync(body);
+                context.Response.Close();
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.Contains("200", wire);
+                Assert.DoesNotContain("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Assert.Contains("CURRENT_MAIN_ADMIN_AUTH_BYPASS_SENTINEL_4e91", wire);
+
+                Console.WriteLine("CURRENT_MAIN_AUTH_SCHEME_FULL_WIRE_BYPASS=CONFIRMED");
+            }
         }
 
 
         [ConditionalFact(typeof(HttpListenerFactory), nameof(HttpListenerFactory.SupportsWildcards))]
-        public async Task AuthenticationSchemeSelector_AbsoluteFormMismatchedHost_ExperimentalGuardChallenges()
+        public async Task AuthenticationSchemeSelector_AbsoluteFormAuthorityCanonicalizationGuard_PreservesControls()
         {
-            using var factory = new HttpListenerFactory("*", path: "");
-            HttpListener listener = factory.GetListener();
-            listener.AuthenticationSchemes = AuthenticationSchemes.None;
-            listener.AuthenticationSchemeSelectorDelegate = request =>
+            static async Task<string> ReceiveWireAsync(System.Net.Sockets.Socket client)
+            {
+                byte[] buffer = new byte[4096];
+                using var ms = new System.IO.MemoryStream();
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+                try
+                {
+                    while (true)
+                    {
+                        int n = await client.ReceiveAsync(buffer.AsMemory(), System.Net.Sockets.SocketFlags.None, cts.Token);
+                        if (n == 0)
+                        {
+                            break;
+                        }
+
+                        await ms.WriteAsync(buffer.AsMemory(0, n), cts.Token);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                }
+
+                return Encoding.ASCII.GetString(ms.ToArray());
+            }
+
+            static AuthenticationSchemes SelectScheme(HttpListenerRequest request)
             {
                 string host = request.UserHostName ?? string.Empty;
                 string hostOnly = host.Split(':')[0];
+
                 return string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
                     ? AuthenticationSchemes.Anonymous
                     : AuthenticationSchemes.Basic;
-            };
+            }
 
-            using var client = factory.GetConnectedSocket();
-            string raw =
-                $"GET http://admin.test:{factory.Port}/feature HTTP/1.1\r\n" +
-                "Host: public.test\r\n" +
-                "Connection: close\r\n" +
-                "\r\n";
+            // Public control must remain unchanged by the canonicalization fix.
+            {
+                using var factory = new HttpListenerFactory("*", path: "");
+                HttpListener listener = factory.GetListener();
+                listener.AuthenticationSchemes = AuthenticationSchemes.None;
+                listener.Realm = "admin-research";
+                listener.AuthenticationSchemeSelectorDelegate = SelectScheme;
 
-            Task<HttpListenerContext> serverTask = listener.GetContextAsync();
-            await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+                using var client = factory.GetConnectedSocket();
+                Task<HttpListenerContext> serverTask = listener.GetContextAsync();
 
-            byte[] buffer = new byte[4096];
-            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
-            int bytesRead = await client.ReceiveAsync(buffer.AsMemory(), System.Net.Sockets.SocketFlags.None, cts.Token);
-            string response = Encoding.ASCII.GetString(buffer, 0, bytesRead);
+                string raw =
+                    $"GET /public HTTP/1.1\r\n" +
+                    "Host: public.test\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
 
-            Assert.Contains("401", response);
-            Assert.False(serverTask.IsCompleted);
-            Console.WriteLine("EXPERIMENTAL_AUTHORITY_GUARD=BLOCKS_AUTH_BYPASS");
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                HttpListenerContext context = await serverTask.WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Null(context.User);
+                Assert.Equal("public.test", context.Request.UserHostName);
+
+                byte[] body = Encoding.ASCII.GetBytes("PUBLIC_CONTROL_AFTER_GUARD\n");
+                context.Response.StatusCode = 200;
+                context.Response.ContentLength64 = body.Length;
+                await context.Response.OutputStream.WriteAsync(body);
+                context.Response.Close();
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.Contains("200", wire);
+                Assert.DoesNotContain("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Console.WriteLine("EXPERIMENTAL_GUARD_PUBLIC_CONTROL=PASS");
+            }
+
+            // Ordinary admin request must still produce the framework Basic challenge.
+            {
+                using var factory = new HttpListenerFactory("*", path: "");
+                HttpListener listener = factory.GetListener();
+                listener.AuthenticationSchemes = AuthenticationSchemes.None;
+                listener.Realm = "admin-research";
+                listener.AuthenticationSchemeSelectorDelegate = SelectScheme;
+
+                using var client = factory.GetConnectedSocket();
+                Task<HttpListenerContext> serverTask = listener.GetContextAsync();
+
+                string raw =
+                    $"GET /admin HTTP/1.1\r\n" +
+                    "Host: admin.test\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
+
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.Contains("401", wire);
+                Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Assert.False(serverTask.IsCompletedSuccessfully);
+
+                listener.Close();
+                Task completed = await Task.WhenAny(serverTask, Task.Delay(TimeSpan.FromSeconds(2)));
+                Assert.Same(serverTask, completed);
+                try { await serverTask; } catch { }
+
+                Console.WriteLine("EXPERIMENTAL_GUARD_ADMIN_CONTROL=PASS");
+            }
+
+            // The same exploit bytes must now be canonicalized to admin before the
+            // selector executes. The framework must issue Basic 401 and never deliver
+            // an anonymous HttpListenerContext.
+            {
+                using var factory = new HttpListenerFactory("*", path: "");
+                HttpListener listener = factory.GetListener();
+                listener.AuthenticationSchemes = AuthenticationSchemes.None;
+                listener.Realm = "admin-research";
+
+                string selectorUserHost = "<not-called>";
+                string selectorUrlHost = "<not-called>";
+                AuthenticationSchemes selected = AuthenticationSchemes.None;
+
+                listener.AuthenticationSchemeSelectorDelegate = request =>
+                {
+                    selectorUserHost = request.UserHostName ?? "<null>";
+                    selectorUrlHost = request.Url?.Host ?? "<null>";
+                    selected = SelectScheme(request);
+
+                    Console.WriteLine(
+                        $"EXPERIMENTAL_GUARD_SELECTOR UserHostName={selectorUserHost} Url.Host={selectorUrlHost} Selected={selected}");
+
+                    return selected;
+                };
+
+                using var client = factory.GetConnectedSocket();
+                Task<HttpListenerContext> serverTask = listener.GetContextAsync();
+
+                string raw =
+                    $"GET http://admin.test:{factory.Port}/admin HTTP/1.1\r\n" +
+                    "Host: public.test\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
+
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                string wire = await ReceiveWireAsync(client);
+                Assert.Contains("401", wire);
+                Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal(AuthenticationSchemes.Basic, selected);
+                Assert.StartsWith("admin.test", selectorUserHost, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal("admin.test", selectorUrlHost);
+                Assert.False(serverTask.IsCompletedSuccessfully);
+
+                listener.Close();
+                Task completed = await Task.WhenAny(serverTask, Task.Delay(TimeSpan.FromSeconds(2)));
+                Assert.Same(serverTask, completed);
+                try { await serverTask; } catch { }
+
+                Console.WriteLine("EXPERIMENTAL_AUTHORITY_CANONICALIZATION_GUARD=BLOCKS_BYPASS");
+            }
         }
 
