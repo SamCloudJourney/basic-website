@@ -150,7 +150,7 @@ jobs:
           s = p.read_text()
           marker = "//#region Redirect Tests"
           lines = [
-              "\t test('localhost redirect is implicitly trusted while equivalent non-local redirect is blocked', async () => {",
+              "\ttest('localhost redirect is implicitly trusted while equivalent non-local redirect is blocked', async () => {",
               "\t\tconst source = URI.parse('https://attacker.example/start');",
               "\t\tconst loader = createWebPageLoader(source, { followRedirects: false }, (uri) => isURLDomainTrusted(uri, []));",
               "\t\twindow.webContents.debugger.sendCommand.resolves({});",
