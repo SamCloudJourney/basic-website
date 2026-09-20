@@ -71,8 +71,40 @@ class Program
         catch { return ""; }
     }
 
-    static async Task Main()
+    static async Task RunBackend()
     {
+        const int port = 18081;
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://*:{port}/");
+        listener.Start();
+        Console.WriteLine($"BACKEND_READY port={port}");
+        Console.Out.Flush();
+
+        while (true)
+        {
+            HttpListenerContext ctx = await listener.GetContextAsync();
+            string[]? hosts = ctx.Request.Headers.GetValues("Host");
+            string line = $"BACKEND_CONTEXT HOST={ctx.Request.UserHostName} URLHOST={ctx.Request.Url?.Host} HOSTVALUES={string.Join("|", hosts ?? Array.Empty<string>())} METHOD={ctx.Request.HttpMethod} RAWURL={ctx.Request.RawUrl}";
+            Console.WriteLine(line);
+            Console.Out.Flush();
+
+            byte[] body = Encoding.UTF8.GetBytes(line + "\n");
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = "text/plain";
+            ctx.Response.ContentLength64 = body.Length;
+            await ctx.Response.OutputStream.WriteAsync(body);
+            ctx.Response.Close();
+        }
+    }
+
+    static async Task Main(string[] args)
+    {
+        if (args.Length > 0 && args[0] == "--server")
+        {
+            await RunBackend();
+            return;
+        }
+
         Console.WriteLine($"OS={Environment.OSVersion}");
         Console.WriteLine($"FRAMEWORK={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
 
