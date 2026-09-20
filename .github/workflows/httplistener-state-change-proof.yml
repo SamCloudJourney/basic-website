@@ -1,0 +1,30 @@
+name: HttpListener protected state-change proof
+
+on:
+  push:
+    branches:
+      - research/httplistener-state-change-proof-20260920
+
+permissions:
+  contents: read
+
+jobs:
+  state-change:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Configure local researcher host aliases
+        shell: bash
+        run: |
+          echo '127.0.0.1 public.test admin.test' | sudo tee -a /etc/hosts
+      - name: Run protected state-change proof
+        working-directory: research/httplistener-state-change-proof
+        run: dotnet run -c Release
