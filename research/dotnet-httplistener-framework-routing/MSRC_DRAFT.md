@@ -69,6 +69,72 @@ Validated current runtime source commit:
 
 `12921b1d8c6865a774232de9379133020ad23d79`
 
+## Two independent end-to-end proof shapes
+
+I validated the same root cause through two independent configurations.
+
+### A. Microsoft-documented selector model
+
+Clean run:
+
+https://github.com/SamCloudJourney/basic-website/actions/runs/35528996700
+
+A single HttpListener instance owns both exact prefixes:
+
+```text
+http://public.test:<port>/
+http://admin.test:<port>/
+```
+
+Its `AuthenticationSchemeSelectorDelegate` uses `UserHostName`, which Microsoft's
+`AuthenticationSchemes` documentation explicitly identifies as a supported request characteristic for choosing
+different authentication mechanisms.
+
+Results:
+
+```text
+ordinary public:
+  UserHostName=public.test
+  Url.Host=public.test
+  selected=Anonymous
+  200, context delivered
+
+ordinary admin:
+  UserHostName=admin.test
+  Url.Host=admin.test
+  selected=Basic
+  401 + WWW-Authenticate: Basic
+  no context delivered
+
+absolute admin + Host public on Linux/macOS:
+  UserHostName=public.test
+  Url.Host=admin.test
+  selected=Anonymous
+  200
+  anonymous context delivered for admin authority
+
+same request on Windows/http.sys:
+  UserHostName=admin.test
+  Url.Host=admin.test
+  selected=Basic
+  401 + Basic challenge
+  no context delivered
+```
+
+This is the closest reproduction to Microsoft's documented per-request authentication model.
+
+### B. Framework-owned prefix-routing model
+
+Clean run:
+
+https://github.com/SamCloudJourney/basic-website/actions/runs/35528291290
+
+Two different HttpListener instances own the public and admin prefixes. Managed HttpListener's own
+`HttpEndPointListener.SearchListener(Request.Url)` routes the conflicting absolute-form request to the ADMIN listener.
+That admin listener's authentication selector then sees the stale public `UserHostName` and selects Anonymous.
+
+This removes custom application routing from the security chain.
+
 ## Proof configuration
 
 Synthetic DNS names are mapped to loopback in the researcher-controlled test environment.
