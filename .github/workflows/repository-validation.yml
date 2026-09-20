@@ -100,7 +100,9 @@ jobs:
             app.exit(2);
             process.exit(2);
           }, 90000);
-          await app.whenReady();
+          console.log('CHECKPOINT=before-app-ready');
+await app.whenReady();
+console.log('CHECKPOINT=app-ready');
           let exitCode = 0;
           try {
             console.log('SOURCE_AUTHORITY=' + nonLoopback + ':' + sourcePort);
@@ -108,9 +110,13 @@ jobs:
             console.log('TRUST_LOOPBACK=' + isURLDomainTrusted(URI.parse(`http://127.0.0.1:${targetPort}/secret`), []));
             console.log('TRUST_CONTROL=' + isURLDomainTrusted(URI.parse(`http://${nonLoopback}:${controlPort}/blocked`), []));
 
-            const candidate = await extract('/candidate');
+            console.log('CHECKPOINT=before-candidate');
+  const candidate = await extract('/candidate');
+  console.log('CHECKPOINT=after-candidate');
             const candidateHits = hits.loopback;
-            const control = await extract('/control');
+            console.log('CHECKPOINT=before-control');
+  const control = await extract('/control');
+  console.log('CHECKPOINT=after-control');
 
             console.log('CANDIDATE_RESULT=' + JSON.stringify(candidate));
             console.log('CONTROL_RESULT=' + JSON.stringify(control));
@@ -139,4 +145,7 @@ jobs:
         working-directory: vscode
         run: |
           set -euxo pipefail
-          timeout 120s xvfb-run -a ./.build/electron/code-oss --no-sandbox ./vscode-localhost-redirect.mjs
+          ELECTRON_RUN_AS_NODE=1 ./.build/electron/code-oss -e "console.log(require('electron'))" || true
+          cp ./.build/electron/code-oss /tmp/electron-bin
+          unset ELECTRON_RUN_AS_NODE
+          timeout 120s xvfb-run -a /tmp/electron-bin --no-sandbox ./vscode-localhost-redirect.mjs
