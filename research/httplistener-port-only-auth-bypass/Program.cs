@@ -84,27 +84,19 @@ async Task<(HttpListener pub,HttpListener adm)> StartPair()
 
     var wt=ReadWire(c);var first=await Task.WhenAny(wt,pt,at).WaitAsync(TimeSpan.FromSeconds(5));
 
-    if(OperatingSystem.IsWindows())
-    {
-        string wire=await wt;
-        string firstLine=wire.Split(new[]{"\r\n","\n"},StringSplitOptions.None)[0];
-        Console.WriteLine($"PORT_ONLY_WINDOWS_ATTACK RESULT={firstLine} PUB_CALLS={pc} ADMIN_CALLS={ac} USERHOST={uh} URLAUTHORITY={ua} RAWURL={ru} PUBLIC_CONTEXT={pt.IsCompletedSuccessfully} ADMIN_CONTEXT={at.IsCompletedSuccessfully}");
-    }
-    else
-    {
-        if(!ReferenceEquals(first,at))throw new Exception("managed Unix did not route to protected admin listener");
-        var ctx=await at;
-        if(pc!=0||ac!=1||chosen!=AuthenticationSchemes.Anonymous||ctx.User is not null)throw new Exception("port-only bypass invariant failed");
-        if(ctx.Request.Url?.Port!=adminPort)throw new Exception("Url port was not rewritten to local admin port");
-        if(!string.Equals(ctx.Request.UserHostName,$"127.0.0.1:{publicPort}",StringComparison.OrdinalIgnoreCase))throw new Exception("selector did not retain public authority");
-        byte[] body=Encoding.ASCII.GetBytes("PORT_ONLY_ADMIN_ACTION_EXECUTED=true\n");
-        ctx.Response.StatusCode=200;ctx.Response.ContentLength64=body.Length;await ctx.Response.OutputStream.WriteAsync(body);ctx.Response.Close();
-        string wire=await wt;
-        if(!wire.Contains("200")||wire.Contains("WWW-Authenticate: Basic",StringComparison.OrdinalIgnoreCase))throw new Exception("port-only attack wire");
-        Console.WriteLine(
-            $"PORT_ONLY_AUTH_BYPASS=CONFIRMED WIRE_HOST_EQUALS_TARGET_AUTHORITY=True TCP_DESTINATION_PORT={adminPort} " +
-            $"RAW_TARGET_PORT={publicPort} USERHOST={ctx.Request.UserHostName} URLAUTHORITY={ctx.Request.Url?.Authority} " +
-            $"ROUTED_LISTENER=ADMIN SELECTED={chosen} USER=ANONYMOUS STATUS_200=True PUBLIC_SELECTOR_CALLS={pc} ADMIN_SELECTOR_CALLS={ac}");
-    }
+    if(!ReferenceEquals(first,at))throw new Exception($"protected admin context was not delivered first; first={first.Status}");
+    var ctx=await at;
+    if(pc!=0||ac!=1||chosen!=AuthenticationSchemes.Anonymous||ctx.User is not null)throw new Exception("port-only bypass invariant failed");
+    if(ctx.Request.Url?.Port!=adminPort)throw new Exception("Url port was not rewritten to local admin port");
+    if(!string.Equals(ctx.Request.UserHostName,$"127.0.0.1:{publicPort}",StringComparison.OrdinalIgnoreCase))throw new Exception("selector did not retain public authority");
+    byte[] body=Encoding.ASCII.GetBytes("PORT_ONLY_ADMIN_ACTION_EXECUTED=true\n");
+    ctx.Response.StatusCode=200;ctx.Response.ContentLength64=body.Length;await ctx.Response.OutputStream.WriteAsync(body);ctx.Response.Close();
+    string wire=await wt;
+    if(!wire.Contains("200")||wire.Contains("WWW-Authenticate: Basic",StringComparison.OrdinalIgnoreCase))throw new Exception("port-only attack wire");
+    Console.WriteLine(
+        $"PORT_ONLY_AUTH_BYPASS=CONFIRMED WIRE_HOST_EQUALS_TARGET_AUTHORITY=True TCP_DESTINATION_PORT={adminPort} " +
+        $"RAW_TARGET_PORT={publicPort} USERHOST={ctx.Request.UserHostName} URLAUTHORITY={ctx.Request.Url?.Authority} " +
+        $"ROUTED_LISTENER=ADMIN SELECTED={chosen} USER=ANONYMOUS STATUS_200=True BASIC_CHALLENGE=False " +
+        $"PUBLIC_SELECTOR_CALLS={pc} ADMIN_SELECTOR_CALLS={ac}");
 }
 Console.WriteLine("PORT_ONLY_AUTHORITY_BYPASS_MATRIX=PASS");
