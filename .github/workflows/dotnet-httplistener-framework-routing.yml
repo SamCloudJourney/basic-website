@@ -26,6 +26,9 @@ jobs:
           - name: macos-net10
             os: macos-15
             dotnet: "10.0"
+          - name: windows-net10
+            os: windows-2025
+            dotnet: "10.0"
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -37,11 +40,19 @@ jobs:
         with:
           dotnet-version: '${{ matrix.dotnet }}.x'
 
-      - name: Map synthetic authorities to loopback
+      - name: Map synthetic authorities to loopback (Unix)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           echo "127.0.0.1 public.test admin.test" | sudo tee -a /etc/hosts
           cat /etc/hosts
+
+      - name: Map synthetic authorities to loopback (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "`n127.0.0.1 public.test admin.test"
+          Get-Content "$env:SystemRoot\System32\drivers\etc\hosts"
 
       - name: Pin TFM
         shell: bash
