@@ -81,4 +81,112 @@
             context.Response.Close();
         }
 
+
+        [ConditionalFact(typeof(HttpListenerFactory), nameof(HttpListenerFactory.SupportsWildcards))]
+        public async Task AbsoluteFormPublicPortToAdminSocket_AuthorityAgreementGuard_BlocksBypass()
+        {
+            static int GetFreePort()
+            {
+                using var tcp = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+                tcp.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Loopback, 0));
+                return ((System.Net.IPEndPoint)tcp.LocalEndPoint!).Port;
+            }
+
+            int publicPort = GetFreePort();
+            int adminPort = GetFreePort();
+            while (adminPort == publicPort)
+            {
+                adminPort = GetFreePort();
+            }
+
+            using var publicListener = new HttpListener();
+            using var adminListener = new HttpListener();
+
+            publicListener.Prefixes.Add($"http://localhost:{publicPort}/public/");
+            adminListener.Prefixes.Add($"http://localhost:{adminPort}/admin/");
+
+            publicListener.AuthenticationSchemes = AuthenticationSchemes.Anonymous;
+
+            AuthenticationSchemes selected = AuthenticationSchemes.None;
+            string selectorUserHost = string.Empty;
+            string selectorUrlAuthority = string.Empty;
+
+            adminListener.AuthenticationSchemes = AuthenticationSchemes.None;
+            adminListener.AuthenticationSchemeSelectorDelegate = request =>
+            {
+                selectorUserHost = request.UserHostName ?? string.Empty;
+                selectorUrlAuthority = request.Url?.Authority ?? string.Empty;
+
+                int colon = selectorUserHost.LastIndexOf(':');
+                int seenPort = colon >= 0 &&
+                    int.TryParse(selectorUserHost[(colon + 1)..], out int parsed)
+                        ? parsed
+                        : -1;
+
+                selected = seenPort == publicPort
+                    ? AuthenticationSchemes.Anonymous
+                    : AuthenticationSchemes.Basic;
+
+                Console.WriteLine(
+                    $"CURRENT_MAIN_CROSS_PORT_GUARD_SELECTOR UserHostName={selectorUserHost} UrlAuthority={selectorUrlAuthority} Selected={selected}");
+
+                return selected;
+            };
+
+            publicListener.Start();
+            adminListener.Start();
+
+            Task<HttpListenerContext> publicTask = publicListener.GetContextAsync();
+            Task<HttpListenerContext> adminTask = adminListener.GetContextAsync();
+
+            using var client = new System.Net.Sockets.Socket(System.Net.Sockets.AddressFamily.InterNetwork, System.Net.Sockets.SocketType.Stream, System.Net.Sockets.ProtocolType.Tcp);
+            await client.ConnectAsync(System.Net.IPAddress.Loopback, adminPort);
+
+            string raw =
+                $"POST http://localhost:{publicPort}/admin/change HTTP/1.1\r\n" +
+                $"Host: localhost:{publicPort}\r\n" +
+                "Content-Length: 0\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+
+            await client.SendAsync(Encoding.ASCII.GetBytes(raw), System.Net.Sockets.SocketFlags.None);
+
+            byte[] buffer = new byte[4096];
+            using var ms = new System.IO.MemoryStream();
+            using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+            try
+            {
+                while (true)
+                {
+                    int n = await client.ReceiveAsync(
+                        buffer.AsMemory(),
+                        System.Net.Sockets.SocketFlags.None,
+                        cts.Token);
+                    if (n == 0)
+                    {
+                        break;
+                    }
+
+                    await ms.WriteAsync(buffer.AsMemory(0, n), cts.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
+            string wire = Encoding.ASCII.GetString(ms.ToArray());
+
+            Assert.Contains("401", wire);
+            Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(AuthenticationSchemes.Basic, selected);
+            Assert.EndsWith($":{adminPort}", selectorUserHost, StringComparison.Ordinal);
+            Assert.EndsWith($":{adminPort}", selectorUrlAuthority, StringComparison.Ordinal);
+            Assert.False(publicTask.IsCompletedSuccessfully);
+            Assert.False(adminTask.IsCompletedSuccessfully);
+
+            Console.WriteLine(
+                $"CURRENT_MAIN_CROSS_PORT_AUTHORITY_AGREEMENT_GUARD=BLOCKS_BYPASS publicPort={publicPort} adminPort={adminPort} UserHostName={selectorUserHost} UrlAuthority={selectorUrlAuthority}");
+        }
+
 // current-main cross-port regression compile fix
