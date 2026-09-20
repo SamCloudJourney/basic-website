@@ -51,6 +51,65 @@ jobs:
           dotnet restore
           dotnet run -c Release --no-restore
 
+  current-main-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout current dotnet runtime source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none https://github.com/dotnet/runtime.git runtime-src
+          cd runtime-src
+          git checkout 12921b1d8c6865a774232de9379133020ad23d79
+          echo "RUNTIME_SOURCE_HEAD=$(git rev-parse HEAD)"
+
+      - name: Inject authority invariant regression
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("src/libraries/System.Net.HttpListener/tests/HttpListenerRequestTests.cs")
+          s = p.read_text()
+          marker = "        private async Task<HttpListenerRequest> GetRequest("
+          assert marker in s
+          test = r'''
+        [ConditionalFact(typeof(HttpListenerFactory), nameof(HttpListenerFactory.SupportsWildcards))]
+        public async Task AbsoluteFormMismatchedHost_ExposesConflictingAuthority()
+        {
+            using var factory = new HttpListenerFactory("*", path: "");
+            using Socket client = factory.GetConnectedSocket();
+
+            string raw =
+                $"GET http://admin.test:{factory.Port}/authority HTTP/1.1\r\n" +
+                "Host: public.test\r\n" +
+                "Connection: close\r\n" +
+                "\r\n";
+
+            await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+            HttpListenerContext context = await factory.GetListener().GetContextAsync();
+            Assert.Equal("public.test", context.Request.Headers["Host"]);
+            Assert.Equal("public.test", context.Request.UserHostName);
+            Assert.Equal("admin.test", context.Request.Url!.Host);
+
+            Console.WriteLine("CURRENT_MAIN_AUTHORITY_CONFUSION=CONFIRMED");
+            context.Response.Close();
+        }
+
+'''
+          p.write_text(s.replace(marker, test + marker, 1))
+          PY
+
+      - name: Run current-main production-source regression
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./dotnet.sh build src/libraries/System.Net.HttpListener/tests/System.Net.HttpListener.Tests.csproj             -c Release             /t:Test             /p:XunitMethodName=System.Net.Tests.HttpListenerRequestTests.AbsoluteFormMismatchedHost_ExposesConflictingAuthority
+
   boundary-chain:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
