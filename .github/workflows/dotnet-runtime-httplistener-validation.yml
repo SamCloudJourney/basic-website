@@ -1,4 +1,4 @@
-name: dotnet HttpListener parser differential validation
+name: dotnet HttpListener advanced parser validation
 
 on:
   push:
@@ -27,19 +27,22 @@ jobs:
         working-directory: research/dotnet-httplistener
         run: dotnet run -c Release
 
-
-  proxy-chain:
+  boundary-chain:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Install real HTTP intermediaries
+
+      - name: Install nginx HAProxy and Apache
         run: |
           sudo apt-get update
-          sudo apt-get install -y nginx haproxy
+          sudo apt-get install -y nginx haproxy apache2
+          sudo a2enmod proxy proxy_http rewrite headers
+          sudo systemctl stop apache2 || true
+
       - name: Start managed HttpListener backend
         shell: bash
         run: |
@@ -47,12 +50,13 @@ jobs:
           cd research/dotnet-httplistener
           nohup dotnet run -c Release -- --server > /tmp/backend.log 2>&1 &
           for i in {1..60}; do
-            if grep -q BACKEND_READY /tmp/backend.log; then break; fi
+            grep -q BACKEND_READY /tmp/backend.log && break
             sleep 1
           done
           cat /tmp/backend.log
           grep -q BACKEND_READY /tmp/backend.log
-      - name: Start nginx
+
+      - name: Configure nginx baseline and Host ACL
         shell: bash
         run: |
           mkdir -p /tmp/nginx/logs
@@ -71,10 +75,21 @@ jobs:
                 proxy_pass http://127.0.0.1:18081;
               }
             }
+            server {
+              listen 127.0.0.1:18085;
+              if ($http_host != "public.test") { return 403; }
+              location / {
+                proxy_http_version 1.1;
+                proxy_set_header Connection close;
+                proxy_set_header Host $http_host;
+                proxy_pass http://127.0.0.1:18081;
+              }
+            }
           }
           EOF
           sudo nginx -p /tmp/nginx -c /tmp/nginx/nginx.conf
-      - name: Start HAProxy
+
+      - name: Configure HAProxy baseline Host ACL and path ACL
         shell: bash
         run: |
           cat >/tmp/haproxy.cfg <<'EOF'
@@ -85,15 +100,63 @@ jobs:
             timeout connect 3s
             timeout client 5s
             timeout server 5s
-          frontend fe
+
+          frontend baseline
             bind 127.0.0.1:18082
             default_backend be
+
+          frontend host_acl
+            bind 127.0.0.1:18084
+            http-request deny deny_status 403 unless { hdr(host),lower -m str public.test }
+            default_backend be
+
+          frontend path_acl
+            bind 127.0.0.1:18087
+            http-request deny deny_status 403 unless { path_beg /public }
+            default_backend be
+
           backend be
             server s1 127.0.0.1:18081
           EOF
           nohup haproxy -f /tmp/haproxy.cfg -db >/tmp/haproxy.log 2>&1 &
           sleep 1
-      - name: Probe duplicate Host and mixed line endings
+
+      - name: Configure Apache baseline and Host ACL
+        shell: bash
+        run: |
+          cat >/tmp/apache.conf <<'EOF'
+          ServerRoot "/etc/apache2"
+          PidFile /tmp/apache.pid
+          Listen 127.0.0.1:18083
+          Listen 127.0.0.1:18086
+          LoadModule mpm_event_module /usr/lib/apache2/modules/mod_mpm_event.so
+          LoadModule authz_core_module /usr/lib/apache2/modules/mod_authz_core.so
+          LoadModule authz_host_module /usr/lib/apache2/modules/mod_authz_host.so
+          LoadModule proxy_module /usr/lib/apache2/modules/mod_proxy.so
+          LoadModule proxy_http_module /usr/lib/apache2/modules/mod_proxy_http.so
+          LoadModule rewrite_module /usr/lib/apache2/modules/mod_rewrite.so
+          ErrorLog /tmp/apache-error.log
+          LogLevel info
+
+          <VirtualHost 127.0.0.1:18083>
+            ProxyPreserveHost On
+            ProxyPass / http://127.0.0.1:18081/
+            ProxyPassReverse / http://127.0.0.1:18081/
+          </VirtualHost>
+
+          <VirtualHost 127.0.0.1:18086>
+            ProxyPreserveHost On
+            RewriteEngine On
+            RewriteCond %{HTTP_HOST} !^public\.test$ [NC]
+            RewriteRule ^ - [F]
+            ProxyPass / http://127.0.0.1:18081/
+            ProxyPassReverse / http://127.0.0.1:18081/
+          </VirtualHost>
+          EOF
+          sudo /usr/sbin/apache2 -f /tmp/apache.conf -DFOREGROUND >/tmp/apache.log 2>&1 &
+          sleep 2
+
+      - name: Execute authority and path boundary matrix
         shell: bash
         run: |
           set -euxo pipefail
@@ -105,3 +168,6 @@ jobs:
           cat /tmp/nginx/logs/error.log || true
           echo '--- haproxy logs ---'
           cat /tmp/haproxy.log || true
+          echo '--- apache logs ---'
+          cat /tmp/apache.log || true
+          cat /tmp/apache-error.log || true
