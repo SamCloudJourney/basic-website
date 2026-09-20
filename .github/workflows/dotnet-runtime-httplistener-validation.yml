@@ -132,6 +132,13 @@ jobs:
           PY
           git diff -- src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpListenerRequest.Managed.cs
 
+      - name: Rebuild patched HttpListener product assembly
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./dotnet.sh build src/libraries/System.Net.HttpListener/src/System.Net.HttpListener.csproj -c Release
+
       - name: Run experimental guard negative control
         working-directory: runtime-src
         shell: bash
