@@ -1,0 +1,165 @@
+name: VS Code git grep pager validation
+on:
+  push:
+    branches: [ research/vscode-git-grep-pager-20260920 ]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VSCODE_SHA: 44825207bf4389c3bd17c92d3ec28cf784c324cc
+      TEST_FILE: src/vs/platform/agentHost/test/node/gitGrepPagerAutoApprove.regression.test.ts
+      RULE_FILE: src/vs/platform/terminal/common/autoApprove/gitAutoApproveRules.ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+      - name: Checkout exact VS Code target
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none https://github.com/microsoft/vscode.git vscode
+          cd vscode
+          git checkout "$VSCODE_SHA"
+          test "$(git rev-parse HEAD)" = "$VSCODE_SHA"
+          printf 'SHA=%s\nNODE=%s\nNPM=%s\nGIT=%s\n' "$(git rev-parse HEAD)" "$(node -v)" "$(npm -v)" "$(git --version)"
+      - name: Native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libkrb5-dev libx11-dev libxkbfile-dev pkg-config
+      - name: Install and transpile
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          npm ci --no-audit --no-fund
+          npm run transpile-client
+      - name: Add real permission regression
+        working-directory: vscode
+        run: |
+          cat > "$TEST_FILE" <<'EOF'
+          import assert from 'assert';
+          import { mkdtempSync, realpathSync, rmSync } from 'fs';
+          import { tmpdir } from 'os';
+          import { DisposableStore } from '../../../../base/common/lifecycle.js';
+          import { join } from '../../../../base/common/path.js';
+          import { URI } from '../../../../base/common/uri.js';
+          import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
+          import { NullLogService } from '../../../log/common/log.js';
+          import { SessionStatus, ToolCallConfirmationReason, type SessionSummary } from '../../common/state/sessionState.js';
+          import { AgentConfigurationService } from '../../node/agentConfigurationService.js';
+          import { AgentHostStateManager } from '../../node/agentHostStateManager.js';
+          import { CommandAutoApprover } from '../../node/commandAutoApprover.js';
+          import { SessionPermissionManager, type IToolApprovalEvent } from '../../node/sessionPermissions.js';
+          import { createSessionDataService } from '../common/sessionTestHelpers.js';
+
+          suite('git grep pager permission regression', () => {
+            const disposables = new DisposableStore();
+            const sessionUri = URI.from({ scheme: 'copilot', path: '/git-grep-pager' }).toString();
+            let manager: AgentHostStateManager;
+            let configService: AgentConfigurationService;
+            let permissions: SessionPermissionManager;
+            let workDir: string;
+            function shellEvent(commandLine: string): IToolApprovalEvent {
+              return { toolCallId: 'tc', session: URI.parse(sessionUri), permissionKind: 'shell', toolInput: commandLine, shellLanguage: 'bash' };
+            }
+            setup(async () => {
+              workDir = realpathSync(mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), 'vscode-grep-')));
+              manager = disposables.add(new AgentHostStateManager(new NullLogService()));
+              configService = disposables.add(new AgentConfigurationService(manager, new NullLogService()));
+              permissions = disposables.add(new SessionPermissionManager(manager, {}, configService, new NullLogService(), createSessionDataService()));
+              await permissions.initialize();
+              const now = new Date().toISOString();
+              const summary: SessionSummary = { resource: sessionUri, provider: 'copilot', title: 'repro', status: SessionStatus.Idle, createdAt: now, modifiedAt: now, project: { uri: 'file:///project', displayName: 'Project' }, workingDirectories: [URI.file(workDir).toString()] };
+              manager.createSession(summary);
+            });
+            teardown(() => { disposables.clear(); rmSync(workDir, { recursive: true, force: true }); });
+            ensureNoDisposablesAreLeakedInTestSuite();
+            test('differential', async () => {
+              const approver = disposables.add(new CommandAutoApprover(new NullLogService()));
+              await approver.initialize();
+              const commands = {
+                plain: 'git grep needle',
+                p: 'git grep -p needle',
+                W: 'git grep -W needle',
+                r: 'git grep -r needle',
+                O: 'git grep -Osh needle -- payload.sh',
+                nO: 'git grep -nOsh needle -- payload.sh',
+                longO: 'git grep --open-files-in-pager=sh needle -- payload.sh',
+                pO: 'git grep -pOsh needle -- payload.sh',
+                WO: 'git grep -WOsh needle -- payload.sh',
+                rO: 'git grep -rOsh needle -- payload.sh',
+                npO: 'git grep -npOsh needle -- payload.sh'
+              };
+              const rule: Record<string, unknown> = {};
+              const permission: Record<string, string> = {};
+              const conv = (v: unknown) => v === ToolCallConfirmationReason.NotNeeded ? 'not-needed' : v === undefined ? 'confirmation-required' : String(v);
+              for (const [k,c] of Object.entries(commands)) {
+                rule[k] = approver.shouldAutoApprove(c);
+                permission[k] = conv(await permissions.getAutoApproval(shellEvent(c), sessionUri));
+              }
+              console.log('RULE_LAYER=' + JSON.stringify(rule));
+              console.log('PERMISSION_LAYER=' + JSON.stringify(permission));
+              assert.strictEqual(rule.plain, 'approved');
+            });
+          });
+          EOF
+          npm run transpile-client
+      - name: Baseline and BEFORE
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          npm run test-node -- --run src/vs/platform/agentHost/test/node/commandAutoApprover.test.ts
+          npm run test-node -- --run src/vs/platform/agentHost/test/node/sessionPermissions.test.ts
+          npm run test-node -- --run "$TEST_FILE"
+      - name: Harmless real Git process sink
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          ROOT="$(mktemp -d)"
+          export SAFE_MARKER="$ROOT/marker.txt"
+          mkdir -p "$ROOT/repo"
+          cd "$ROOT/repo"
+          git init
+          git config user.email repro@example.invalid
+          git config user.name Repro
+          cat > payload.sh <<'PAYLOAD'
+          # needle
+          printf 'SAFE_PAGER_EXECUTION\n' > "$SAFE_MARKER"
+          PAYLOAD
+          git add payload.sh
+          git commit -m base
+          chmod 0644 payload.sh
+          rm -f "$SAFE_MARKER"
+          GIT_TRACE=1 git grep -pOsh needle -- payload.sh 2>"$ROOT/pO.trace" || true
+          test -f "$SAFE_MARKER"
+          echo "PO_MARKER=$(cat "$SAFE_MARKER")"
+          grep -E 'run_command|start_command' "$ROOT/pO.trace" || true
+          rm -f "$SAFE_MARKER"
+          GIT_TRACE=1 git grep -WOsh needle -- payload.sh 2>"$ROOT/WO.trace" || true
+          test -f "$SAFE_MARKER"
+          echo "WO_MARKER=$(cat "$SAFE_MARKER")"
+          grep -E 'run_command|start_command' "$ROOT/WO.trace" || true
+      - name: Apply narrow fix
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("src/vs/platform/terminal/common/autoApprove/gitAutoApproveRules.ts")
+          s=p.read_text()
+          old='[aIivwhHEGPFnlLqzco]*'
+          new='[aIivwhHEGPFnlLqzcopWr]*'
+          assert old in s
+          p.write_text(s.replace(old,new,1))
+          PY
+          git diff -- "$RULE_FILE"
+          npm run transpile-client
+      - name: AFTER
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          npm run test-node -- --run src/vs/platform/agentHost/test/node/commandAutoApprover.test.ts
+          npm run test-node -- --run src/vs/platform/agentHost/test/node/sessionPermissions.test.ts
+          npm run test-node -- --run "$TEST_FILE"
