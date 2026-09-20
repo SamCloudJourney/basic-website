@@ -246,6 +246,74 @@ class Program
         listener.Stop();
     }
 
+
+    static async Task RunAuthSelectorCase(string name, Func<int, string> makeRequest)
+    {
+        int port = await FreePort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://*:{port}/");
+        listener.AuthenticationSchemeSelectorDelegate = request =>
+        {
+            string host = request.UserHostName ?? "";
+            string hostOnly = host.Split(':')[0];
+            AuthenticationSchemes selected =
+                string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
+                    ? AuthenticationSchemes.Anonymous
+                    : AuthenticationSchemes.Basic;
+
+            Console.WriteLine($"AUTH_SELECTOR={name} USERHOST={request.UserHostName} URLHOST={request.Url?.Host} SELECTED={selected}");
+            return selected;
+        };
+        listener.Start();
+
+        Task<HttpListenerContext> contextTask = listener.GetContextAsync();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, port);
+        using NetworkStream ns = client.GetStream();
+        await ns.WriteAsync(Encoding.ASCII.GetBytes(makeRequest(port)));
+        await ns.FlushAsync();
+
+        Task<string> responseTask = ReadSome(ns);
+        Task first = await Task.WhenAny(contextTask, responseTask, Task.Delay(4000));
+
+        if (first == contextTask && contextTask.IsCompletedSuccessfully)
+        {
+            HttpListenerContext ctx = await contextTask;
+            bool adminRoute = string.Equals(ctx.Request.Url?.Host, "admin.test", StringComparison.OrdinalIgnoreCase);
+            string result = $"AUTH_FEATURE_CASE={name} RESULT=CONTEXT USERHOST={ctx.Request.UserHostName} URLHOST={ctx.Request.Url?.Host} USER={(ctx.User is null ? "ANONYMOUS" : "AUTHENTICATED")} ADMIN_ROUTE={adminRoute}";
+            Console.WriteLine(result);
+
+            string payload = adminRoute
+                ? "AUTH_SCHEME_BYPASS_SENTINEL_c2a7\nADMIN_FEATURE_SECRET=research-only-secret\n" + result + "\n"
+                : result + "\n";
+
+            byte[] body = Encoding.ASCII.GetBytes(payload);
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentLength64 = body.Length;
+            await ctx.Response.OutputStream.WriteAsync(body);
+            ctx.Response.Close();
+
+            string clientResponse = await responseTask;
+            bool sentinelReturned = clientResponse.Contains("AUTH_SCHEME_BYPASS_SENTINEL_c2a7", StringComparison.Ordinal);
+            string firstLine = clientResponse.Split(new[]{"\r\n","\n"}, StringSplitOptions.None)[0];
+            Console.WriteLine($"AUTH_FEATURE_CLIENT={name} FIRSTLINE={firstLine} SENTINEL_RETURNED={sentinelReturned}");
+        }
+        else if (first == responseTask)
+        {
+            string response = await responseTask;
+            string firstLine = response.Split(new[]{"\r\n","\n"}, StringSplitOptions.None)[0];
+            bool challenged = firstLine.Contains("401", StringComparison.Ordinal);
+            Console.WriteLine($"AUTH_FEATURE_CASE={name} RESULT=RESPONSE FIRSTLINE={firstLine} CHALLENGED={challenged}");
+        }
+        else
+        {
+            Console.WriteLine($"AUTH_FEATURE_CASE={name} RESULT=TIMEOUT");
+        }
+
+        listener.Stop();
+    }
+
     static async Task Main(string[] args)
     {
         if (args.Length > 0 && args[0] == "--server")
@@ -329,6 +397,24 @@ class Program
         {
             try { await RunAuthorityCase(authorityCase.Name, authorityCase.MakeRequest); }
             catch(Exception ex) { Console.WriteLine($"AUTH_CASE={authorityCase.Name} RESULT=EXCEPTION TYPE={ex.GetType().Name} MSG={ex.Message.Replace("\r"," ").Replace("\n"," ")}"); }
+        }
+
+        var authFeatureCases = new (string Name, Func<int,string> MakeRequest)[]
+        {
+            ("PUBLIC_ORIGIN", p =>
+                $"GET /feature HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
+
+            ("ADMIN_ORIGIN", p =>
+                $"GET /feature HTTP/1.1\r\nHost: admin.test\r\nConnection: close\r\n\r\n"),
+
+            ("ABS_ADMIN_HOST_PUBLIC", p =>
+                $"GET http://admin.test:{p}/feature HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
+        };
+
+        foreach (var authFeatureCase in authFeatureCases)
+        {
+            try { await RunAuthSelectorCase(authFeatureCase.Name, authFeatureCase.MakeRequest); }
+            catch(Exception ex) { Console.WriteLine($"AUTH_FEATURE_CASE={authFeatureCase.Name} RESULT=EXCEPTION TYPE={ex.GetType().Name} MSG={ex.Message.Replace("\r"," ").Replace("\n"," ")}"); }
         }
     }
 }
