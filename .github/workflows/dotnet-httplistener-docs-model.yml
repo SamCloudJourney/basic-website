@@ -14,11 +14,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: linux-net8, os: ubuntu-24.04, dotnet: "8.0" }
-          - { name: linux-net9, os: ubuntu-24.04, dotnet: "9.0" }
-          - { name: linux-net10, os: ubuntu-24.04, dotnet: "10.0" }
-          - { name: macos-net10, os: macos-15, dotnet: "10.0" }
-          - { name: windows-net10, os: windows-2025, dotnet: "10.0" }
+          - { name: linux-net8, os: ubuntu-24.04, sdk: "8.0.x", tfm: "8.0" }
+          - { name: linux-net9, os: ubuntu-24.04, sdk: "9.0.x", tfm: "9.0" }
+          - { name: linux-net10, os: ubuntu-24.04, sdk: "10.0.x", tfm: "10.0" }
+          - { name: macos-net10, os: macos-15, sdk: "10.0.x", tfm: "10.0" }
+          - { name: windows-net10, os: windows-2025, sdk: "10.0.x", tfm: "10.0" }
+          - { name: linux-net11-rc1, os: ubuntu-24.04, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+          - { name: macos-net11-rc1, os: macos-15, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+          - { name: windows-net11-rc1, os: windows-2025, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
@@ -26,7 +29,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '${{ matrix.dotnet }}.x'
+          dotnet-version: '${{ matrix.sdk }}'
 
       - name: Map test names on Unix
         if: runner.os != 'Windows'
@@ -47,7 +50,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           p=Path("docs-model.csproj")
-          p.write_text(p.read_text().replace("<TargetFramework>net10.0</TargetFramework>","<TargetFramework>net${{ matrix.dotnet }}</TargetFramework>"))
+          p.write_text(p.read_text().replace("<TargetFramework>net10.0</TargetFramework>","<TargetFramework>net${{ matrix.tfm }}</TargetFramework>"))
           PY
 
       - name: Runtime info
