@@ -230,3 +230,72 @@ Host: public.test
 
 The relevant managed authority construction remains present in current runtime source commit
 `12921b1d8c6865a774232de9379133020ad23d79`.
+
+
+## Exact framework source-to-security-sink chain
+
+Current runtime source commit:
+`12921b1d8c6865a774232de9379133020ad23d79`
+
+1. `HttpConnection` finishes parsing and calls:
+
+```csharp
+_context.Request.FinishInitialization();
+```
+
+2. Managed `HttpListenerRequest.FinishInitialization()` derives `Request.Url` from the absolute-form authority,
+but leaves `Headers["Host"]` / `UserHostName` unchanged.
+
+3. `HttpConnection` binds and registers the context:
+
+```csharp
+_epl.BindContext(_context);
+listener.RegisterContext(_context);
+```
+
+4. `ListenerAsyncResult.Complete(HttpListenerContext)` invokes the framework security decision before delivering
+the context:
+
+```csharp
+context.AuthenticationSchemes =
+    context._listener!.SelectAuthenticationScheme(context);
+```
+
+5. `HttpListener.SelectAuthenticationScheme()` directly invokes the configured first-party selector:
+
+```csharp
+return AuthenticationSchemeSelectorDelegate != null
+    ? AuthenticationSchemeSelectorDelegate(context.Request)
+    : _authenticationScheme;
+```
+
+6. If the selected scheme is `Basic` and the client did not authenticate, the framework sets 401 and:
+
+```csharp
+context.Response.Headers["WWW-Authenticate"] =
+    context.AuthenticationSchemes + " realm=\"" + context._listener!.Realm + "\"";
+```
+
+7. In the vulnerable absolute-form mismatch, managed HttpListener instead selects `Anonymous`, skips that Basic
+challenge path, and delivers the context to the application.
+
+The clean final proof verifies the actual wire-level differential:
+
+```text
+ordinary admin:
+401 Unauthorized
+basicChallenge=True
+
+absolute admin + Host public on Linux/macOS:
+200 OK
+scheme=Anonymous
+basicChallenge=False
+admin secret returned / protected admin action executed
+
+same bytes on Windows/http.sys:
+401 Unauthorized
+scheme=Basic
+basicChallenge=True
+```
+
+This places the attacker-controlled stale authority directly on the input to a framework-owned authentication decision.
