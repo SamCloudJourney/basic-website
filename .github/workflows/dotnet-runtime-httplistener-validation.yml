@@ -26,3 +26,82 @@ jobs:
       - name: Run raw parser differential harness
         working-directory: research/dotnet-httplistener
         run: dotnet run -c Release
+
+
+  proxy-chain:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Install real HTTP intermediaries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nginx haproxy
+      - name: Start managed HttpListener backend
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd research/dotnet-httplistener
+          nohup dotnet run -c Release -- --server > /tmp/backend.log 2>&1 &
+          for i in {1..60}; do
+            if grep -q BACKEND_READY /tmp/backend.log; then break; fi
+            sleep 1
+          done
+          cat /tmp/backend.log
+          grep -q BACKEND_READY /tmp/backend.log
+      - name: Start nginx
+        shell: bash
+        run: |
+          mkdir -p /tmp/nginx/logs
+          cat >/tmp/nginx/nginx.conf <<'EOF'
+          events {}
+          error_log /tmp/nginx/logs/error.log info;
+          pid /tmp/nginx/nginx.pid;
+          http {
+            access_log /tmp/nginx/logs/access.log;
+            server {
+              listen 127.0.0.1:18080;
+              location / {
+                proxy_http_version 1.1;
+                proxy_set_header Connection close;
+                proxy_set_header Host $http_host;
+                proxy_pass http://127.0.0.1:18081;
+              }
+            }
+          }
+          EOF
+          sudo nginx -p /tmp/nginx -c /tmp/nginx/nginx.conf
+      - name: Start HAProxy
+        shell: bash
+        run: |
+          cat >/tmp/haproxy.cfg <<'EOF'
+          global
+            log stdout format raw local0
+          defaults
+            mode http
+            timeout connect 3s
+            timeout client 5s
+            timeout server 5s
+          frontend fe
+            bind 127.0.0.1:18082
+            default_backend be
+          backend be
+            server s1 127.0.0.1:18081
+          EOF
+          nohup haproxy -f /tmp/haproxy.cfg -db >/tmp/haproxy.log 2>&1 &
+          sleep 1
+      - name: Probe duplicate Host and mixed line endings
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 research/dotnet-httplistener/proxy_probe.py | tee /tmp/probe.log
+          echo '--- backend contexts ---'
+          cat /tmp/backend.log
+          echo '--- nginx logs ---'
+          cat /tmp/nginx/logs/access.log || true
+          cat /tmp/nginx/logs/error.log || true
+          echo '--- haproxy logs ---'
+          cat /tmp/haproxy.log || true
