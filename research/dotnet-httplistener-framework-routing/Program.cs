@@ -14,6 +14,7 @@ record CaseResult(
     bool PublicContext,
     bool AdminContext,
     bool AdminSentinel,
+    bool AdminAction,
     string SelectorUserHost,
     string SelectorUrlHost,
     AuthenticationSchemes SelectedScheme);
@@ -21,6 +22,7 @@ record CaseResult(
 class Program
 {
     private const string AdminSentinel = "FRAMEWORK_ADMIN_AUTH_BYPASS_SENTINEL_f31a";
+    private const string AdminActionSentinel = "FRAMEWORK_ADMIN_STATE_CHANGE_SENTINEL_8d42";
 
     static int FreePort()
     {
@@ -125,9 +127,17 @@ class Program
             HttpListenerContext ctx = await adminTask;
             Console.WriteLine(
                 $"ADMIN_CONTEXT case={name} UserHostName={ctx.Request.UserHostName} Url.Host={ctx.Request.Url?.Host} User={(ctx.User is null ? "ANONYMOUS" : "AUTHENTICATED")}");
-            byte[] body = Encoding.ASCII.GetBytes(
-                AdminSentinel + "\n" +
-                "ADMIN_ACTION_EXECUTED=true\n");
+            bool executeAdminAction =
+                string.Equals(ctx.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(ctx.Request.Url?.AbsolutePath, "/admin-action", StringComparison.Ordinal);
+
+            string payload = AdminSentinel + "\n";
+            if (executeAdminAction)
+            {
+                payload += AdminActionSentinel + "\nADMIN_ACTION_EXECUTED=true\n";
+            }
+
+            byte[] body = Encoding.ASCII.GetBytes(payload);
             ctx.Response.StatusCode = 200;
             ctx.Response.ContentLength64 = body.Length;
             await ctx.Response.OutputStream.WriteAsync(body);
@@ -138,9 +148,10 @@ class Program
         string firstLine = wire.Split(new[]{"\r\n","\n"}, StringSplitOptions.None)[0];
         bool basic = wire.Contains("WWW-Authenticate: Basic", StringComparison.OrdinalIgnoreCase);
         bool sentinel = wire.Contains(AdminSentinel, StringComparison.Ordinal);
+        bool adminAction = wire.Contains(AdminActionSentinel, StringComparison.Ordinal);
 
         Console.WriteLine(
-            $"RESULT case={name} first={firstLine} basicChallenge={basic} publicContext={publicContext} adminContext={adminContext} adminSentinel={sentinel} selectorUserHost={selectorUserHost} selectorUrlHost={selectorUrlHost} selected={selected}");
+            $"RESULT case={name} first={firstLine} basicChallenge={basic} publicContext={publicContext} adminContext={adminContext} adminSentinel={sentinel} adminAction={adminAction} selectorUserHost={selectorUserHost} selectorUrlHost={selectorUrlHost} selected={selected}");
 
         publicListener.Close();
         adminListener.Close();
@@ -148,7 +159,7 @@ class Program
         // No authentication-rejected request may later materialize as a context.
         await Task.Delay(100);
 
-        return new CaseResult(name, firstLine, basic, publicContext, adminContext, sentinel,
+        return new CaseResult(name, firstLine, basic, publicContext, adminContext, sentinel, adminAction,
             selectorUserHost, selectorUrlHost, selected);
     }
 
@@ -169,6 +180,14 @@ class Program
             "ABSOLUTE_ADMIN_HOST_PUBLIC",
             p => $"GET http://admin.test:{p}/ HTTP/1.1\r\nHost: public.test:{p}\r\nConnection: close\r\n\r\n");
 
+        CaseResult adminActionControl = await RunCase(
+            "ADMIN_ACTION_CONTROL",
+            p => $"POST /admin-action HTTP/1.1\r\nHost: admin.test:{p}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+
+        CaseResult adminActionConflict = await RunCase(
+            "ABSOLUTE_ADMIN_ACTION_HOST_PUBLIC",
+            p => $"POST http://admin.test:{p}/admin-action HTTP/1.1\r\nHost: public.test:{p}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+
         Require(publicControl.FirstLine.Contains("200"), "public control must return 200");
         Require(publicControl.PublicContext && !publicControl.AdminContext, "public control must route to public listener");
         Require(!publicControl.BasicChallenge && !publicControl.AdminSentinel, "public control must not challenge or expose admin sentinel");
@@ -179,11 +198,20 @@ class Program
         Require(!adminControl.AdminSentinel, "ordinary unauthenticated admin request must not execute protected admin action");
         Require(adminControl.SelectedScheme == AuthenticationSchemes.Basic, "admin selector must choose Basic");
 
+        Require(adminActionControl.FirstLine.Contains("401"), "ordinary admin POST must require authentication");
+        Require(adminActionControl.BasicChallenge, "ordinary admin POST must include Basic challenge");
+        Require(!adminActionControl.AdminContext && !adminActionControl.AdminAction,
+            "ordinary unauthenticated admin POST must not reach or execute admin action");
+
         if (OperatingSystem.IsWindows())
         {
             Require(conflict.FirstLine.Contains("401"), "Windows/http.sys must challenge conflicting request");
             Require(conflict.BasicChallenge, "Windows/http.sys must include Basic challenge");
             Require(!conflict.AdminContext && !conflict.AdminSentinel, "Windows/http.sys must not deliver protected admin context");
+            Require(adminActionConflict.FirstLine.Contains("401"), "Windows/http.sys must challenge conflicting admin POST");
+            Require(adminActionConflict.BasicChallenge, "Windows/http.sys conflicting admin POST must include Basic challenge");
+            Require(!adminActionConflict.AdminContext && !adminActionConflict.AdminAction,
+                "Windows/http.sys must not execute protected admin action");
             Console.WriteLine("FRAMEWORK_PREFIX_WINDOWS_NEGATIVE_CONTROL=PASS");
         }
         else
@@ -200,7 +228,17 @@ class Program
             Require(string.Equals(conflict.SelectorUrlHost, "admin.test", StringComparison.OrdinalIgnoreCase),
                 "same request must expose admin authority in Url.Host");
 
+            Require(adminActionConflict.FirstLine.Contains("200"), "managed conflicting admin POST must return 200");
+            Require(!adminActionConflict.BasicChallenge, "managed conflicting admin POST must omit Basic challenge");
+            Require(adminActionConflict.AdminContext && !adminActionConflict.PublicContext,
+                "framework must route conflicting POST to ADMIN listener");
+            Require(adminActionConflict.SelectedScheme == AuthenticationSchemes.Anonymous,
+                "admin POST selector must drop to Anonymous from stale public Host");
+            Require(adminActionConflict.AdminAction,
+                "protected admin state-changing action must execute anonymously");
+
             Console.WriteLine("FRAMEWORK_PREFIX_ROUTING_AUTH_BYPASS=CONFIRMED");
+            Console.WriteLine("FRAMEWORK_PREFIX_ADMIN_STATE_CHANGE_BYPASS=CONFIRMED");
         }
     }
 }
