@@ -1,0 +1,62 @@
+name: HttpListener framework-owned routing auth bypass
+
+on:
+  push:
+    branches:
+      - research/dotnet-httplistener-framework-routing-20260920
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-net8
+            os: ubuntu-24.04
+            dotnet: "8.0"
+          - name: linux-net9
+            os: ubuntu-24.04
+            dotnet: "9.0"
+          - name: linux-net10
+            os: ubuntu-24.04
+            dotnet: "10.0"
+          - name: macos-net10
+            os: macos-15
+            dotnet: "10.0"
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ matrix.dotnet }}.x'
+
+      - name: Map synthetic authorities to loopback
+        shell: bash
+        run: |
+          echo "127.0.0.1 public.test admin.test" | sudo tee -a /etc/hosts
+          cat /etc/hosts
+
+      - name: Pin TFM
+        shell: bash
+        working-directory: research/dotnet-httplistener-framework-routing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("routing-proof.csproj")
+          s=p.read_text().replace("<TargetFramework>net10.0</TargetFramework>","<TargetFramework>net${{ matrix.dotnet }}</TargetFramework>")
+          p.write_text(s)
+          PY
+
+      - name: Runtime info
+        run: dotnet --info
+
+      - name: Run framework-owned routing proof
+        working-directory: research/dotnet-httplistener-framework-routing
+        run: dotnet run -c Release
