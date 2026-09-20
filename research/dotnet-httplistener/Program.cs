@@ -206,14 +206,23 @@ class Program
             string hostHeader = ctx.Request.Headers["Host"] ?? "<null>";
             string userHost = ctx.Request.UserHostName ?? "<null>";
             string urlHost = ctx.Request.Url?.Host ?? "<null>";
-            bool confusion = userHost.StartsWith("public.test", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(urlHost, "admin.test", StringComparison.OrdinalIgnoreCase);
 
-            string result = $"AUTH_CASE={name} RESULT=CONTEXT HOSTHDR={hostHeader} USERHOST={userHost} URLHOST={urlHost} RAWURL={ctx.Request.RawUrl} CONFUSION={confusion}";
+            // Researcher-controlled two-tenant security boundary:
+            // 1) front-door authorization trusts UserHostName/Host and only permits public.test;
+            // 2) application tenant routing uses Request.Url.Host;
+            // 3) admin.test contains a synthetic secret unavailable to the public tenant.
+            bool authorizedAsPublic = string.Equals(userHost.Split(':')[0], "public.test", StringComparison.OrdinalIgnoreCase);
+            bool routedToAdmin = string.Equals(urlHost, "admin.test", StringComparison.OrdinalIgnoreCase);
+            bool authorizationBypass = authorizedAsPublic && routedToAdmin;
+
+            string result = $"AUTH_CASE={name} RESULT=CONTEXT HOSTHDR={hostHeader} USERHOST={userHost} URLHOST={urlHost} RAWURL={ctx.Request.RawUrl} AUTHZ={(authorizedAsPublic ? "ALLOW_PUBLIC" : "DENY")} ROUTE={(routedToAdmin ? "ADMIN" : "PUBLIC")} BYPASS={authorizationBypass}";
             Console.WriteLine(result);
 
-            byte[] body = Encoding.ASCII.GetBytes((confusion ? "AUTHORITY_CONFUSION_SENTINEL_71c4\n" : "") + result + "\n");
-            ctx.Response.StatusCode = 200;
+            string payload = authorizationBypass
+                ? "TENANT_AUTH_BYPASS_SENTINEL_71c4\nADMIN_SECRET=research-only-secret\n" + result + "\n"
+                : result + "\n";
+            byte[] body = Encoding.ASCII.GetBytes(payload);
+            ctx.Response.StatusCode = authorizedAsPublic ? 200 : 403;
             ctx.Response.ContentLength64 = body.Length;
             await ctx.Response.OutputStream.WriteAsync(body);
             ctx.Response.Close();
