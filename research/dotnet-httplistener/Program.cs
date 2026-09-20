@@ -100,6 +100,69 @@ class Program
         }
     }
 
+
+    static async Task RunChunkCase(string name, string chunkSizeLine)
+    {
+        int port = await FreePort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+        listener.Start();
+
+        Task<HttpListenerContext> contextTask = listener.GetContextAsync();
+
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, port);
+        using NetworkStream ns = client.GetStream();
+
+        string raw =
+            $"POST /chunk HTTP/1.1\r\n" +
+            $"Host: 127.0.0.1:{port}\r\n" +
+            "Transfer-Encoding: chunked\r\n" +
+            "Connection: close\r\n" +
+            "\r\n" +
+            chunkSizeLine + "\r\n" +
+            "Hello\r\n" +
+            "0\r\n" +
+            "\r\n";
+
+        await ns.WriteAsync(Encoding.Latin1.GetBytes(raw));
+        await ns.FlushAsync();
+
+        Task<string> responseTask = ReadSome(ns);
+        Task first = await Task.WhenAny(contextTask, responseTask, Task.Delay(3000));
+
+        if (first == contextTask && contextTask.IsCompletedSuccessfully)
+        {
+            HttpListenerContext ctx = await contextTask;
+            try
+            {
+                using var ms = new MemoryStream();
+                await ctx.Request.InputStream.CopyToAsync(ms).WaitAsync(TimeSpan.FromSeconds(3));
+                string body = Encoding.ASCII.GetString(ms.ToArray());
+                Console.WriteLine($"CHUNK_CASE={name} RESULT=BODY BODY={body}");
+                ctx.Response.StatusCode = 204;
+                ctx.Response.Close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"CHUNK_CASE={name} RESULT=READ_ERROR TYPE={ex.GetType().Name} MSG={ex.Message.Replace("\r"," ").Replace("\n"," ")}");
+                try { ctx.Response.Abort(); } catch { }
+            }
+        }
+        else if (first == responseTask)
+        {
+            string response = await responseTask;
+            string firstLine = response.Split(new[]{"\r\n","\n"}, StringSplitOptions.None)[0];
+            Console.WriteLine($"CHUNK_CASE={name} RESULT=RESPONSE FIRSTLINE={firstLine}");
+        }
+        else
+        {
+            Console.WriteLine($"CHUNK_CASE={name} RESULT=TIMEOUT");
+        }
+
+        listener.Stop();
+    }
+
     static async Task Main(string[] args)
     {
         if (args.Length > 0 && args[0] == "--server")
@@ -144,6 +207,24 @@ class Program
         {
             try { await RunCase(c); }
             catch(Exception ex) { Console.WriteLine($"CASE={c.Name} RESULT=EXCEPTION TYPE={ex.GetType().Name} MSG={ex.Message.Replace("\r"," ").Replace("\n"," ")}"); }
+        }
+
+        var chunkCases = new (string Name, string Line)[]
+        {
+            ("VALID_EXTENSION", "5;foo=bar"),
+            ("EMPTY_EXTENSION", "5;"),
+            ("DOUBLE_SEMICOLON", "5;;foo=bar"),
+            ("MISSING_EXTENSION_NAME", "5;=bar"),
+            ("UNTERMINATED_QUOTED_VALUE", "5;foo=\"unterminated"),
+            ("SPACE_IN_UNQUOTED_VALUE", "5;foo=bar baz"),
+            ("TAB_AFTER_SEMICOLON", "5;\tfoo=bar"),
+            ("CONTROL_IN_EXTENSION", "5;foo=\u0001bar"),
+        };
+
+        foreach (var chunkCase in chunkCases)
+        {
+            try { await RunChunkCase(chunkCase.Name, chunkCase.Line); }
+            catch(Exception ex) { Console.WriteLine($"CHUNK_CASE={chunkCase.Name} RESULT=EXCEPTION TYPE={ex.GetType().Name} MSG={ex.Message.Replace("\r"," ").Replace("\n"," ")}"); }
         }
     }
 }
