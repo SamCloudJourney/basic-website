@@ -10,6 +10,8 @@ TARGETS = [
     ("NGINX_HOST_ACL", 18085),
     ("APACHE_HOST_ACL", 18086),
     ("HAPROXY_PATH_ACL", 18087),
+    ("NGINX_PATH_ACL", 18088),
+    ("APACHE_PATH_ACL", 18089),
 ]
 
 CASES = [
@@ -20,6 +22,7 @@ CASES = [
     ("ABSFORM_PUBLIC_HOST_ADMIN_URI", "GET http://admin.test/abs HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
     ("ABSFORM_ADMIN_HOST_PUBLIC_URI", "GET http://public.test/abs HTTP/1.1\r\nHost: admin.test\r\nConnection: close\r\n\r\n"),
     ("ABSFORM_USERINFO", "GET http://public.test@admin.test/userinfo HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
+    ("DIRECT_ADMIN", "GET /admin HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
     ("PATH_DOTDOT_ENCODED", "GET /public/%2e%2e/admin HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
     ("PATH_DOTDOT_MIXED", "GET /public/.%2e/admin HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
     ("PATH_ENCODED_SLASH", "GET /public%2f..%2fadmin HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
