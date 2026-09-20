@@ -30,6 +30,11 @@ jobs:
           test "$(git rev-parse HEAD)" = "$VSCODE_SHA"
           printf 'SHA=%s\nNODE=%s\nNPM=%s\nGIT=%s\n' "$(git rev-parse HEAD)" "$(node -v)" "$(npm -v)" "$(git --version)"
 
+      - name: Install native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libkrb5-dev
+
       - name: Install and transpile
         working-directory: vscode
         run: |
