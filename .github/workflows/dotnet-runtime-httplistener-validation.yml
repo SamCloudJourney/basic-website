@@ -85,6 +85,16 @@ jobs:
                 proxy_pass http://127.0.0.1:18081;
               }
             }
+            server {
+              listen 127.0.0.1:18088;
+              location /public/ {
+                proxy_http_version 1.1;
+                proxy_set_header Connection close;
+                proxy_set_header Host $http_host;
+                proxy_pass http://127.0.0.1:18081;
+              }
+              location / { return 403; }
+            }
           }
           EOF
           sudo nginx -p /tmp/nginx -c /tmp/nginx/nginx.conf
@@ -129,6 +139,7 @@ jobs:
           PidFile /tmp/apache.pid
           Listen 127.0.0.1:18083
           Listen 127.0.0.1:18086
+          Listen 127.0.0.1:18089
           LoadModule mpm_event_module /usr/lib/apache2/modules/mod_mpm_event.so
           LoadModule authz_core_module /usr/lib/apache2/modules/mod_authz_core.so
           LoadModule authz_host_module /usr/lib/apache2/modules/mod_authz_host.so
@@ -148,6 +159,15 @@ jobs:
             ProxyPreserveHost On
             RewriteEngine On
             RewriteCond %{HTTP_HOST} !^public\.test$ [NC]
+            RewriteRule ^ - [F]
+            ProxyPass / http://127.0.0.1:18081/
+            ProxyPassReverse / http://127.0.0.1:18081/
+          </VirtualHost>
+
+          <VirtualHost 127.0.0.1:18089>
+            ProxyPreserveHost On
+            RewriteEngine On
+            RewriteCond %{REQUEST_URI} !^/public/
             RewriteRule ^ - [F]
             ProxyPass / http://127.0.0.1:18081/
             ProxyPassReverse / http://127.0.0.1:18081/
