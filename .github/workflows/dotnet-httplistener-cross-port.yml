@@ -3,7 +3,7 @@ name: HttpListener cross-port authority auth bypass
 on:
   push:
     branches:
-      - research/dotnet-httplistener-cross-port-auth-20260920
+      - research/dotnet-httplistener-cross-port-credential-bypass-20260920
 
 permissions:
   contents: read
