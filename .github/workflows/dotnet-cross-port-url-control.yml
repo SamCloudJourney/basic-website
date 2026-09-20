@@ -1,0 +1,49 @@
+name: HttpListener cross-port Url selector causal control
+on:
+  push:
+    branches:
+      - research/dotnet-httplistener-cross-port-url-selector-control-20260920
+permissions:
+  contents: read
+jobs:
+  proof:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-net8, os: ubuntu-24.04, sdk: "8.0.x", tfm: "8.0" }
+          - { name: windows-net8, os: windows-2025, sdk: "8.0.x", tfm: "8.0" }
+          - { name: linux-net9, os: ubuntu-24.04, sdk: "9.0.x", tfm: "9.0" }
+          - { name: windows-net9, os: windows-2025, sdk: "9.0.x", tfm: "9.0" }
+          - { name: linux-net10, os: ubuntu-24.04, sdk: "10.0.x", tfm: "10.0" }
+          - { name: macos-net10, os: macos-15, sdk: "10.0.x", tfm: "10.0" }
+          - { name: windows-net10, os: windows-2025, sdk: "10.0.x", tfm: "10.0" }
+          - { name: linux-net11-rc1, os: ubuntu-24.04, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+          - { name: macos-net11-rc1, os: macos-15, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+          - { name: windows-net11-rc1, os: windows-2025, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ matrix.sdk }}'
+      - name: Map app.test Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: echo "127.0.0.1 app.test" | sudo tee -a /etc/hosts
+      - name: Map app.test Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "`n127.0.0.1 app.test"
+      - name: Pin TFM
+        shell: bash
+        working-directory: research/dotnet-cross-port-url-control
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("control.csproj")
+          p.write_text(p.read_text().replace("<TargetFramework>net10.0</TargetFramework>","<TargetFramework>net${{ matrix.tfm }}</TargetFramework>"))
+          PY
+      - working-directory: research/dotnet-cross-port-url-control
+        run: dotnet run -c Release
