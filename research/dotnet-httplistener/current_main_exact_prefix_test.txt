@@ -140,6 +140,77 @@
                 Console.WriteLine("CURRENT_MAIN_EXACT_PREFIX_ADMIN_LISTENER_BASIC_CONTROL=PASS");
             }
 
+            // Reverse exact-prefix differential: Request.Url routes to the PUBLIC listener,
+            // while stale Host/UserHostName makes that public listener select Basic.
+            // No application router participates in either decision.
+            {
+                int port = ReservePort();
+                using var publicListener = new HttpListener();
+                using var adminListener = new HttpListener();
+                publicListener.Prefixes.Add($"http://public.test:{port}/");
+                adminListener.Prefixes.Add($"http://admin.test:{port}/");
+                publicListener.AuthenticationSchemes = AuthenticationSchemes.None;
+                adminListener.AuthenticationSchemes = AuthenticationSchemes.None;
+                publicListener.Realm = "public-research";
+                adminListener.Realm = "admin-research";
+
+                int publicSelectorCalls = 0;
+                int adminSelectorCalls = 0;
+                AuthenticationSchemes publicSelected = AuthenticationSchemes.None;
+                string publicUserHost = "<not-called>";
+                string publicUrlHost = "<not-called>";
+
+                publicListener.AuthenticationSchemeSelectorDelegate = request =>
+                {
+                    System.Threading.Interlocked.Increment(ref publicSelectorCalls);
+                    publicUserHost = request.UserHostName ?? "<null>";
+                    publicUrlHost = request.Url?.Host ?? "<null>";
+                    publicSelected = SelectByAuthority(request);
+                    Console.WriteLine(
+                        $"CURRENT_MAIN_EXACT_MIRROR_PUBLIC_SELECTOR UserHostName={publicUserHost} Url.Host={publicUrlHost} Selected={publicSelected}");
+                    return publicSelected;
+                };
+                adminListener.AuthenticationSchemeSelectorDelegate = request =>
+                {
+                    System.Threading.Interlocked.Increment(ref adminSelectorCalls);
+                    return SelectByAuthority(request);
+                };
+
+                publicListener.Start();
+                adminListener.Start();
+
+                Task<HttpListenerContext> publicTask = publicListener.GetContextAsync();
+                Task<HttpListenerContext> adminTask = adminListener.GetContextAsync();
+                using var client = ConnectLoopback(port);
+
+                string raw =
+                    $"POST http://public.test:{port}/public-action HTTP/1.1\r\n" +
+                    "Host: admin.test\r\n" +
+                    "Content-Length: 0\r\n" +
+                    "Connection: close\r\n\r\n";
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                Task<string> wireTask = ReceiveWireAsync(client);
+                Task first = await Task.WhenAny(wireTask, publicTask, adminTask).WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Same(wireTask, first);
+
+                string wire = await wireTask;
+                Assert.Equal(1, publicSelectorCalls);
+                Assert.Equal(0, adminSelectorCalls);
+                Assert.Equal(AuthenticationSchemes.Basic, publicSelected);
+                Assert.StartsWith("admin.test", publicUserHost, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal("public.test", publicUrlHost);
+                Assert.Contains("401", wire);
+                Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Assert.False(publicTask.IsCompletedSuccessfully);
+                Assert.False(adminTask.IsCompletedSuccessfully);
+
+                Console.WriteLine(
+                    $"CURRENT_MAIN_EXACT_PREFIX_REVERSE_DIFFERENTIAL=CONFIRMED ROUTED_LISTENER=PUBLIC " +
+                    $"USERHOST={publicUserHost} URLHOST={publicUrlHost} SELECTED={publicSelected} " +
+                    $"PUBLIC_CONTEXT_DELIVERED={publicTask.IsCompletedSuccessfully} ADMIN_CONTEXT_DELIVERED={adminTask.IsCompletedSuccessfully}");
+            }
+
             // Attack: request-target selects the exact admin.test prefix/listener, while stale Host
             // makes that selected admin listener's authentication delegate choose Anonymous.
             {
@@ -316,6 +387,10 @@
             Assert.Equal("admin.test", adminUrlHost);
             Assert.False(publicTask.IsCompletedSuccessfully);
             Assert.False(adminTask.IsCompletedSuccessfully);
-            Console.WriteLine("EXPERIMENTAL_EXACT_PREFIX_ADMIN_LISTENER_GUARD=BLOCKS_BYPASS");
+            Console.WriteLine(
+                $"EXPERIMENTAL_EXACT_PREFIX_ADMIN_LISTENER_GUARD=BLOCKS_BYPASS STATUS_401={wire.Contains("401", StringComparison.Ordinal)} " +
+                $"BASIC_CHALLENGE={wire.Contains("WWW-Authenticate: Basic", StringComparison.OrdinalIgnoreCase)} " +
+                $"ROUTED_LISTENER=ADMIN SELECTED={adminSelected} USERHOST={adminUserHost} URLHOST={adminUrlHost} " +
+                $"PUBLIC_CONTEXT_DELIVERED={publicTask.IsCompletedSuccessfully} ADMIN_CONTEXT_DELIVERED={adminTask.IsCompletedSuccessfully}");
         }
 

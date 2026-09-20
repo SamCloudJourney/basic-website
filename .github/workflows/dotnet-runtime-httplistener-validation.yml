@@ -57,14 +57,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Checkout current dotnet runtime source
+      - name: Checkout latest dotnet runtime main
         shell: bash
         run: |
           set -euxo pipefail
           git clone --filter=blob:none https://github.com/dotnet/runtime.git runtime-src
           cd runtime-src
-          git checkout 12921b1d8c6865a774232de9379133020ad23d79
+          git checkout --detach origin/main
           echo "RUNTIME_SOURCE_HEAD=$(git rev-parse HEAD)"
+          echo "RUNTIME_SOURCE_COMMIT_DATE=$(git show -s --format=%cI HEAD)"
+
+      - name: Print current-main framework authority and authentication chain
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo '=== UserHostName reads received Host ==='
+          grep -n -C 2 -F 'public string UserHostName => Headers[HttpKnownHeaderNames.Host]!' src/libraries/System.Net.HttpListener/src/System/Net/HttpListenerRequest.cs
+          echo '=== absolute-form authority builds Request.Url ==='
+          grep -n -C 3 -F 'host = raw_uri.Host;' src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpListenerRequest.Managed.cs
+          echo '=== framework router selects listener from Request.Url ==='
+          grep -n -C 3 -F 'HttpListener? listener = SearchListener(req.Url, out prefix);' src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpEndPointListener.cs
+          grep -n -C 3 -F 'string host = uri.Host;' src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpEndPointListener.cs
+          echo '=== selected listener invokes selector with HttpListenerRequest ==='
+          grep -n -C 2 -F 'AuthenticationSchemeSelectorDelegate(context.Request)' src/libraries/System.Net.HttpListener/src/System/Net/Managed/HttpListener.Managed.cs
+          grep -n -C 3 -F 'context.AuthenticationSchemes = context._listener!.SelectAuthenticationScheme(context);' src/libraries/System.Net.HttpListener/src/System/Net/Managed/ListenerAsyncResult.Managed.cs
+          echo '=== Basic failure is converted to framework 401 challenge before context delivery ==='
+          grep -n -C 4 -F 'context.Response.Headers["WWW-Authenticate"]' src/libraries/System.Net.HttpListener/src/System/Net/Managed/ListenerAsyncResult.Managed.cs
 
       - name: Install runtime native build prerequisites
         shell: bash

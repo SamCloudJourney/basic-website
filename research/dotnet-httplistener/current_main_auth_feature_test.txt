@@ -92,17 +92,71 @@
 
                 await client.SendAsync(Encoding.ASCII.GetBytes(raw));
 
-                string wire = await ReceiveWireAsync(client);
+                Task<string> wireTask = ReceiveWireAsync(client);
+                Task first = await Task.WhenAny(wireTask, serverTask).WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Same(wireTask, first);
+
+                string wire = await wireTask;
                 Assert.Contains("401", wire);
                 Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
-                Assert.False(serverTask.IsCompletedSuccessfully);
+                Assert.False(serverTask.IsCompleted);
 
-                listener.Close();
-                Task completed = await Task.WhenAny(serverTask, Task.Delay(TimeSpan.FromSeconds(2)));
-                Assert.Same(serverTask, completed);
-                try { await serverTask; } catch { }
+                Console.WriteLine(
+                    $"CURRENT_MAIN_ADMIN_BASIC_CONTROL=PASS STATUS_401={wire.Contains("401", StringComparison.Ordinal)} " +
+                    $"BASIC_CHALLENGE={wire.Contains("WWW-Authenticate: Basic", StringComparison.OrdinalIgnoreCase)} " +
+                    $"CONTEXT_DELIVERED={serverTask.IsCompletedSuccessfully}");
+            }
 
-                Console.WriteLine("CURRENT_MAIN_ADMIN_BASIC_CONTROL=PASS");
+            // Mirror differential: reverse only the two authority representations.
+            // Routing authority is public, while the selector sees admin and chooses Basic.
+            // This proves the two framework security decisions independently follow different
+            // attacker-controlled representations rather than a special case for admin.test.
+            {
+                using var factory = new HttpListenerFactory("*", path: "");
+                HttpListener listener = factory.GetListener();
+                listener.AuthenticationSchemes = AuthenticationSchemes.None;
+                listener.Realm = "admin-research";
+
+                string selectorUserHost = "<not-called>";
+                string selectorUrlHost = "<not-called>";
+                AuthenticationSchemes selected = AuthenticationSchemes.None;
+                listener.AuthenticationSchemeSelectorDelegate = request =>
+                {
+                    selectorUserHost = request.UserHostName ?? "<null>";
+                    selectorUrlHost = request.Url?.Host ?? "<null>";
+                    selected = SelectScheme(request);
+                    Console.WriteLine(
+                        $"CURRENT_MAIN_MIRROR_SELECTOR UserHostName={selectorUserHost} Url.Host={selectorUrlHost} Selected={selected}");
+                    return selected;
+                };
+
+                using var client = factory.GetConnectedSocket();
+                Task<HttpListenerContext> serverTask = listener.GetContextAsync();
+
+                string raw =
+                    $"GET http://public.test:{factory.Port}/public HTTP/1.1\r\n" +
+                    "Host: admin.test\r\n" +
+                    "Connection: close\r\n" +
+                    "\r\n";
+
+                await client.SendAsync(Encoding.ASCII.GetBytes(raw));
+
+                Task<string> wireTask = ReceiveWireAsync(client);
+                Task first = await Task.WhenAny(wireTask, serverTask).WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Same(wireTask, first);
+
+                string wire = await wireTask;
+                Assert.Equal(AuthenticationSchemes.Basic, selected);
+                Assert.StartsWith("admin.test", selectorUserHost, StringComparison.OrdinalIgnoreCase);
+                Assert.Equal("public.test", selectorUrlHost);
+                Assert.Contains("401", wire);
+                Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
+                Assert.False(serverTask.IsCompleted);
+
+                Console.WriteLine(
+                    $"CURRENT_MAIN_REVERSE_AUTHORITY_DIFFERENTIAL=CONFIRMED ROUTE_AUTHORITY={selectorUrlHost} " +
+                    $"AUTHORITY_SEEN_BY_SELECTOR={selectorUserHost} SELECTED={selected} " +
+                    $"STATUS_401={wire.Contains("401", StringComparison.Ordinal)} CONTEXT_DELIVERED={serverTask.IsCompletedSuccessfully}");
             }
 
             // Attack: request-target authority is admin, received Host says public.
@@ -261,17 +315,19 @@
 
                 await client.SendAsync(Encoding.ASCII.GetBytes(raw));
 
-                string wire = await ReceiveWireAsync(client);
+                Task<string> wireTask = ReceiveWireAsync(client);
+                Task first = await Task.WhenAny(wireTask, serverTask).WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Same(wireTask, first);
+
+                string wire = await wireTask;
                 Assert.Contains("401", wire);
                 Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
-                Assert.False(serverTask.IsCompletedSuccessfully);
+                Assert.False(serverTask.IsCompleted);
 
-                listener.Close();
-                Task completed = await Task.WhenAny(serverTask, Task.Delay(TimeSpan.FromSeconds(2)));
-                Assert.Same(serverTask, completed);
-                try { await serverTask; } catch { }
-
-                Console.WriteLine("EXPERIMENTAL_GUARD_ADMIN_CONTROL=PASS");
+                Console.WriteLine(
+                    $"EXPERIMENTAL_GUARD_ADMIN_CONTROL=PASS STATUS_401={wire.Contains("401", StringComparison.Ordinal)} " +
+                    $"BASIC_CHALLENGE={wire.Contains("WWW-Authenticate: Basic", StringComparison.OrdinalIgnoreCase)} " +
+                    $"CONTEXT_DELIVERED={serverTask.IsCompletedSuccessfully}");
             }
 
             // The same exploit bytes must now be canonicalized to admin before the
@@ -310,20 +366,23 @@
 
                 await client.SendAsync(Encoding.ASCII.GetBytes(raw));
 
-                string wire = await ReceiveWireAsync(client);
+                Task<string> wireTask = ReceiveWireAsync(client);
+                Task first = await Task.WhenAny(wireTask, serverTask).WaitAsync(TimeSpan.FromSeconds(5));
+                Assert.Same(wireTask, first);
+
+                string wire = await wireTask;
                 Assert.Contains("401", wire);
                 Assert.Contains("WWW-Authenticate: Basic", wire, StringComparison.OrdinalIgnoreCase);
                 Assert.Equal(AuthenticationSchemes.Basic, selected);
                 Assert.StartsWith("admin.test", selectorUserHost, StringComparison.OrdinalIgnoreCase);
                 Assert.Equal("admin.test", selectorUrlHost);
-                Assert.False(serverTask.IsCompletedSuccessfully);
+                Assert.False(serverTask.IsCompleted);
 
-                listener.Close();
-                Task completed = await Task.WhenAny(serverTask, Task.Delay(TimeSpan.FromSeconds(2)));
-                Assert.Same(serverTask, completed);
-                try { await serverTask; } catch { }
-
-                Console.WriteLine("EXPERIMENTAL_AUTHORITY_CANONICALIZATION_GUARD=BLOCKS_BYPASS");
+                Console.WriteLine(
+                    $"EXPERIMENTAL_AUTHORITY_CANONICALIZATION_GUARD=BLOCKS_BYPASS STATUS_401={wire.Contains("401", StringComparison.Ordinal)} " +
+                    $"BASIC_CHALLENGE={wire.Contains("WWW-Authenticate: Basic", StringComparison.OrdinalIgnoreCase)} " +
+                    $"SELECTED={selected} USERHOST={selectorUserHost} URLHOST={selectorUrlHost} " +
+                    $"CONTEXT_DELIVERED={serverTask.IsCompletedSuccessfully}");
             }
         }
 
