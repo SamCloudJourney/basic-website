@@ -95,12 +95,12 @@ jobs:
           p.write_text(s.replace(marker, snippet + marker, 1))
           PY
 
-      - name: Build current-main shared libraries
+      - name: Build current-main CoreCLR and libraries testhost
         working-directory: runtime-src
         shell: bash
         run: |
           set -euxo pipefail
-          ./build.sh -subset libs -c Release
+          ./build.sh -subset clr+libs -c Release -rc Release
 
       - name: Run current-main authority regression
         working-directory: runtime-src
