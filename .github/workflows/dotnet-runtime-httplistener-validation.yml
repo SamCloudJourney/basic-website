@@ -73,16 +73,24 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libkrb5-dev
 
-      - name: Inject authority invariant regression
+      - name: Inject authority and authentication regressions
         shell: bash
         run: |
           set -euxo pipefail
           python3 - <<'PY'
           from pathlib import Path
+
           p = Path("runtime-src/src/libraries/System.Net.HttpListener/tests/HttpListenerRequestTests.cs")
           snippet = Path("research/dotnet-httplistener/current_main_authority_test.txt").read_text()
           s = p.read_text()
           marker = "        private async Task<HttpListenerRequest> GetRequest("
+          assert marker in s
+          p.write_text(s.replace(marker, snippet + marker, 1))
+
+          p = Path("runtime-src/src/libraries/System.Net.HttpListener/tests/HttpListenerAuthenticationTests.cs")
+          snippet = Path("research/dotnet-httplistener/current_main_auth_feature_test.txt").read_text()
+          s = p.read_text()
+          marker = "        public async Task<HttpResponseMessage> AuthenticationFailure("
           assert marker in s
           p.write_text(s.replace(marker, snippet + marker, 1))
           PY
@@ -94,12 +102,19 @@ jobs:
           set -euxo pipefail
           ./build.sh -subset libs -c Release
 
-      - name: Run current-main production-source regression
+      - name: Run current-main authority regression
         working-directory: runtime-src
         shell: bash
         run: |
           set -euxo pipefail
           ./dotnet.sh build src/libraries/System.Net.HttpListener/tests/System.Net.HttpListener.Tests.csproj -c Release /t:Test /p:XunitMethodName=System.Net.Tests.HttpListenerRequestTests.AbsoluteFormMismatchedHost_ExposesConflictingAuthority
+
+      - name: Run current-main authentication feature bypass regression
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./dotnet.sh build src/libraries/System.Net.HttpListener/tests/System.Net.HttpListener.Tests.csproj -c Release /t:Test /p:TestNoBuild=true /p:XunitMethodName=System.Net.Tests.HttpListenerAuthenticationTests.AuthenticationSchemeSelector_AbsoluteFormMismatchedHost_AllowsAnonymousAdmin
 
   boundary-chain:
     runs-on: ubuntu-24.04
