@@ -154,7 +154,12 @@ class Program
             Directory.CreateDirectory(variantDest);
             string variantTar = CreateVariantTar(root);
 
-            TarFile.ExtractToDirectory(variantTar, variantDest, overwriteFiles:true);
+            var defaultOptions = new TarExtractOptions { OverwriteFiles = true };
+            Console.WriteLine($"DEFAULT_HARDLINK_MODE={defaultOptions.HardLinkMode}");
+            Require(defaultOptions.HardLinkMode == TarHardLinkMode.PreserveLink,
+                "default Tar hard-link extraction mode must be PreserveLink");
+
+            TarFile.ExtractToDirectory(variantTar, variantDest, defaultOptions);
 
             string sourceLink = Path.Combine(variantDest, "a", "s");
             string escapedLink = Path.Combine(variantDest, "escape");
@@ -219,6 +224,25 @@ class Program
                 "rebased deep symlink must access second researcher-controlled outside path");
 
             Console.WriteLine("TAR_HARDLINK_REBASE_GENERALITY=CONFIRMED");
+
+            string copyDest = Path.Combine(root, "copycontents-dest");
+            Directory.CreateDirectory(copyDest);
+            TarFile.ExtractToDirectory(
+                variantTar,
+                copyDest,
+                new TarExtractOptions
+                {
+                    OverwriteFiles = true,
+                    HardLinkMode = TarHardLinkMode.CopyContents
+                });
+
+            string copiedEscape = Path.Combine(copyDest, "escape");
+            FileInfo copiedEscapeInfo = new(copiedEscape);
+            Require(copiedEscapeInfo.LinkTarget is null,
+                "CopyContents control should materialize a normal file rather than preserve a rebased symlink");
+            Require(File.ReadAllText(copiedEscape) == "SAFE_INSIDE",
+                "CopyContents control should remain inside extraction root");
+            Console.WriteLine("TAR_HARDLINK_COPYCONTENTS_NEGATIVE_CONTROL=PASS");
 
             string asyncDest = Path.Combine(root, "async-dest");
             Directory.CreateDirectory(asyncDest);
