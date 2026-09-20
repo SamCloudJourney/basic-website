@@ -170,12 +170,13 @@ jobs:
               "\t});",
               ""
           ]
-          test = "\\n".join(lines)
+          test = "\n".join(lines)
           pos = s.find(marker)
           assert pos >= 0
-          line_end = s.find("\\n", pos)
+          line_end = s.find("\n", pos)
           assert line_end >= 0
           p.write_text(s[:line_end + 1] + test + s[line_end + 1:])
+          print("\n".join(p.read_text().splitlines()[1642:1675]))
           PY
           npm run transpile-client
 
