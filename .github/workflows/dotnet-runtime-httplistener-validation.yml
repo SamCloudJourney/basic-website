@@ -53,7 +53,7 @@ jobs:
 
   current-main-source:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -79,6 +79,13 @@ jobs:
           assert marker in s
           p.write_text(s.replace(marker, snippet + marker, 1))
           PY
+
+      - name: Build current-main shared libraries
+        working-directory: runtime-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          ./build.sh -subset libs -c Release
 
       - name: Run current-main production-source regression
         working-directory: runtime-src
