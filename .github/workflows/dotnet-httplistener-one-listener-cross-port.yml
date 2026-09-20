@@ -1,9 +1,9 @@
-name: HttpListener one-listener cross-port auth bypass
+name: HttpListener one-listener cross-port Negotiate bypass
 
 on:
   push:
     branches:
-      - research/dotnet-httplistener-one-listener-cross-port-20260920
+      - research/dotnet-httplistener-one-listener-negotiate-20260920
 
 permissions:
   contents: read
@@ -14,15 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: linux-net8, os: ubuntu-24.04, sdk: "8.0.x", tfm: "8.0" }
-          - { name: windows-net8, os: windows-2025, sdk: "8.0.x", tfm: "8.0" }
-          - { name: linux-net9, os: ubuntu-24.04, sdk: "9.0.x", tfm: "9.0" }
-          - { name: windows-net9, os: windows-2025, sdk: "9.0.x", tfm: "9.0" }
-          - { name: linux-net10, os: ubuntu-24.04, sdk: "10.0.x", tfm: "10.0" }
-          - { name: macos-net10, os: macos-15, sdk: "10.0.x", tfm: "10.0" }
           - { name: windows-net10, os: windows-2025, sdk: "10.0.x", tfm: "10.0" }
-          - { name: linux-net11-rc1, os: ubuntu-24.04, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
-          - { name: macos-net11-rc1, os: macos-15, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
           - { name: windows-net11-rc1, os: windows-2025, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
 
     name: ${{ matrix.name }}
@@ -59,6 +51,6 @@ jobs:
       - name: Runtime info
         run: dotnet --info
 
-      - name: Run one-listener cross-port proof
+      - name: Run one-listener cross-port Negotiate proof
         working-directory: research/dotnet-httplistener-one-listener-cross-port
         run: dotnet run -c Release
