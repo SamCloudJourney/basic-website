@@ -189,6 +189,14 @@ class Program
             host: $"app.test:{publicPort}",
             executeAdminAction: false);
 
+        Obs publicAuthorityAdminPath = await RunCase(
+            "PUBLIC_AUTHORITY_ADMIN_PATH_CONTROL",
+            publicPort, adminPort,
+            connectPort: publicPort,
+            target: "/admin/action",
+            host: $"app.test:{publicPort}",
+            executeAdminAction: true);
+
         Obs adminControl = await RunCase(
             "ADMIN_CONTROL",
             publicPort, adminPort,
@@ -214,6 +222,12 @@ class Program
                 publicControl.Anonymous &&
                 !publicControl.SideEffect,
             "public control must remain anonymous and non-admin");
+
+        Require(!publicAuthorityAdminPath.FirstLine.Contains("200"),
+            "public authority /admin/action must not be a registered public resource");
+        Require(!publicAuthorityAdminPath.ContextDelivered &&
+                !publicAuthorityAdminPath.SideEffect,
+            "public authority /admin/action must not reach any application context or state change");
 
         Require(adminControl.FirstLine.Contains("401"),
             "admin prefix control without credentials must be 401");
