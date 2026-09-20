@@ -226,6 +226,11 @@ class Program
             ctx.Response.ContentLength64 = body.Length;
             await ctx.Response.OutputStream.WriteAsync(body);
             ctx.Response.Close();
+
+            string clientResponse = await responseTask;
+            bool sentinelReturned = clientResponse.Contains("TENANT_AUTH_BYPASS_SENTINEL_71c4", StringComparison.Ordinal);
+            string clientFirstLine = clientResponse.Split(new[]{"\r\n","\n"}, StringSplitOptions.None)[0];
+            Console.WriteLine($"AUTH_CLIENT={name} FIRSTLINE={clientFirstLine} SENTINEL_RETURNED={sentinelReturned}");
         }
         else if (first == responseTask)
         {
