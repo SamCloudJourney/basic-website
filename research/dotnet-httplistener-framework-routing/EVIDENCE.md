@@ -266,3 +266,55 @@ a different authority to select the authentication policy protecting that listen
 
 All hosts, listeners, ports, actions, credentials, and response sentinels used by this proof are synthetic and
 researcher-controlled. No production services or third-party data are involved.
+
+
+## .NET 11 RC1 — in-scope release-candidate validation
+
+Microsoft's .NET bounty page explicitly includes release candidates for upcoming .NET versions.
+
+Clean selector-model run:
+
+https://github.com/SamCloudJourney/basic-website/actions/runs/35529474195
+
+.NET 11.0.0-rc.1.26425.128 results:
+
+Linux:
+
+```text
+PUBLIC_CONTROL:
+  200 OK / Anonymous / context delivered
+
+ADMIN_CONTROL:
+  401 Unauthorized
+  Basic challenge=True
+  context=False
+
+ABSOLUTE_ADMIN_HOST_PUBLIC:
+  UserHostName=public.test:<port>
+  Url.Host=admin.test
+  selected=Anonymous
+  200 OK
+  Basic challenge=False
+  anonymous context=True
+  admin sentinel=True
+
+DOCS_MODEL_AUTHENTICATION_BYPASS=CONFIRMED
+```
+
+macOS produces the same vulnerable result.
+
+Windows/http.sys RC1 negative control:
+
+```text
+ABSOLUTE_ADMIN_HOST_PUBLIC:
+  UserHostName=admin.test:<port>
+  Url.Host=admin.test
+  selected=Basic
+  401 Unauthorized
+  Basic challenge=True
+  context=False
+
+DOCS_MODEL_WINDOWS_NEGATIVE_CONTROL=PASS
+```
+
+This confirms the bug is present not only in supported .NET 8/9/10 but also in the current supported/go-live .NET 11 RC1 line.
