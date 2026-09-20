@@ -69,8 +69,8 @@ class Program
         try { File.Delete(SideEffectPath); } catch { }
 
         using var listener = new HttpListener();
-        listener.Prefixes.Add($"http://app.test:{publicPort}/public/");
-        listener.Prefixes.Add($"http://app.test:{adminPort}/admin/");
+        listener.Prefixes.Add($"http://localhost:{publicPort}/public/");
+        listener.Prefixes.Add($"http://localhost:{adminPort}/admin/");
         listener.AuthenticationSchemes = AuthenticationSchemes.None;
         listener.Realm = "one-listener-cross-port";
 
@@ -186,7 +186,7 @@ class Program
             publicPort, adminPort,
             connectPort: publicPort,
             target: "/public/ping",
-            host: $"app.test:{publicPort}",
+            host: $"localhost:{publicPort}",
             executeAdminAction: false);
 
         Obs adminControl = await RunCase(
@@ -194,15 +194,15 @@ class Program
             publicPort, adminPort,
             connectPort: adminPort,
             target: "/admin/action",
-            host: $"app.test:{adminPort}",
+            host: $"localhost:{adminPort}",
             executeAdminAction: true);
 
         Obs attack = await RunCase(
             "CROSS_PORT_ATTACK",
             publicPort, adminPort,
             connectPort: adminPort,
-            target: $"http://app.test:{publicPort}/admin/action",
-            host: $"app.test:{publicPort}",
+            target: $"http://localhost:{publicPort}/admin/action",
+            host: $"localhost:{publicPort}",
             executeAdminAction: true);
 
         Require(publicControl.FirstLine.Contains("200"),
