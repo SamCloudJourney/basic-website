@@ -10,6 +10,7 @@ sealed record Observation(
     string Name,
     string FirstLine,
     bool SentinelReturned,
+    bool StateChangeReturned,
     bool ContextDelivered,
     string SelectorUserHost,
     string SelectorUrlHost,
@@ -108,9 +109,15 @@ class Program
             contextUrlHost = context.Request.Url?.Host ?? "<null>";
 
             bool adminRoute = string.Equals(contextUrlHost, "admin.test", StringComparison.OrdinalIgnoreCase);
-            string payload = adminRoute
-                ? Sentinel + "\nADMIN_SECRET=research-only-secret\n"
-                : "PUBLIC_RESOURCE\n";
+            bool adminStateChange = adminRoute &&
+                string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(context.Request.Url?.AbsolutePath, "/admin-action", StringComparison.Ordinal);
+
+            string payload = adminStateChange
+                ? "ADMIN_STATE_CHANGE_SENTINEL_83bd\nADMIN_ACTION_EXECUTED=true\n"
+                : adminRoute
+                    ? Sentinel + "\nADMIN_SECRET=research-only-secret\n"
+                    : "PUBLIC_RESOURCE\n";
 
             byte[] body = Encoding.ASCII.GetBytes(payload);
             context.Response.StatusCode = 200;
@@ -122,6 +129,7 @@ class Program
         string response = await responseTask;
         string firstLine = response.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)[0];
         bool sentinelReturned = response.Contains(Sentinel, StringComparison.Ordinal);
+        bool stateChangeReturned = response.Contains("ADMIN_STATE_CHANGE_SENTINEL_83bd", StringComparison.Ordinal);
 
         listener.Stop();
 
@@ -129,6 +137,7 @@ class Program
             name,
             firstLine,
             sentinelReturned,
+            stateChangeReturned,
             contextDelivered,
             selectorUserHost,
             selectorUrlHost,
@@ -139,7 +148,7 @@ class Program
         Console.WriteLine(
             $"RESULT case={name} first={firstLine} context={contextDelivered} " +
             $"selectorUserHost={selectorUserHost} selectorUrlHost={selectorUrlHost} scheme={selectedScheme} " +
-            $"contextUserHost={contextUserHost} contextUrlHost={contextUrlHost} sentinel={sentinelReturned}");
+            $"contextUserHost={contextUserHost} contextUrlHost={contextUrlHost} sentinel={sentinelReturned} stateChange={stateChangeReturned}");
 
         return observation;
     }
@@ -181,6 +190,20 @@ class Program
                  "Connection: close\r\n\r\n",
             selectorUsesUrlHost: true);
 
+        Observation adminActionOrigin = await RunCaseAsync(
+            "ADMIN_ACTION_ORIGIN",
+            p => "POST /admin-action HTTP/1.1\r\n" +
+                 "Host: admin.test\r\n" +
+                 "Content-Length: 0\r\n" +
+                 "Connection: close\r\n\r\n");
+
+        Observation adminActionConflict = await RunCaseAsync(
+            "ABSOLUTE_ADMIN_ACTION_HOST_PUBLIC",
+            p => $"POST http://admin.test:{p}/admin-action HTTP/1.1\r\n" +
+                 "Host: public.test\r\n" +
+                 "Content-Length: 0\r\n" +
+                 "Connection: close\r\n\r\n");
+
         Require(publicOrigin.FirstLine.Contains("200"), "public origin must remain accessible");
         Require(!publicOrigin.SentinelReturned, "public origin must not receive admin sentinel");
         Require(adminOrigin.FirstLine.Contains("401"), "ordinary admin origin must require Basic authentication");
@@ -191,6 +214,11 @@ class Program
             "Url.Host-based selector must select Basic for admin authority");
         Console.WriteLine("URL_HOST_SELECTOR_NEGATIVE_CONTROL=PASS");
 
+        Require(adminActionOrigin.FirstLine.Contains("401"),
+            "ordinary admin POST must require Basic authentication");
+        Require(!adminActionOrigin.StateChangeReturned,
+            "ordinary unauthenticated admin POST must not execute state-changing action");
+
         if (OperatingSystem.IsWindows())
         {
             Require(conflict.FirstLine.Contains("401"), "Windows control must challenge mismatched absolute-form request");
@@ -198,6 +226,10 @@ class Program
             Require(conflict.SelectedScheme == AuthenticationSchemes.Basic, "Windows must select Basic for admin authority");
             Require(conflict.SelectorUserHost.StartsWith("admin.test", StringComparison.OrdinalIgnoreCase),
                 "Windows must canonicalize UserHostName to absolute-form authority");
+            Require(adminActionConflict.FirstLine.Contains("401"),
+                "Windows must challenge conflicting admin POST");
+            Require(!adminActionConflict.StateChangeReturned,
+                "Windows must not execute admin action for unauthenticated conflicting request");
 
             Console.WriteLine("WINDOWS_HTTP_SYS_NEGATIVE_CONTROL=PASS");
         }
@@ -212,8 +244,17 @@ class Program
             Require(string.Equals(conflict.SelectorUrlHost, "admin.test", StringComparison.OrdinalIgnoreCase),
                 "managed Url.Host must be admin absolute-form authority");
             Require(conflict.SentinelReturned, "admin research sentinel must reach unauthenticated client");
+            Require(adminActionConflict.FirstLine.Contains("200"),
+                "managed HttpListener conflicting admin POST should reach protected action");
+            Require(adminActionConflict.ContextDelivered,
+                "managed HttpListener must deliver conflicting admin POST to application");
+            Require(adminActionConflict.SelectedScheme == AuthenticationSchemes.Anonymous,
+                "managed selector must incorrectly select Anonymous for conflicting admin POST");
+            Require(adminActionConflict.StateChangeReturned,
+                "synthetic protected admin state-changing action must execute anonymously");
 
             Console.WriteLine("AUTHENTICATION_SCHEME_SELECTOR_BYPASS=CONFIRMED");
+            Console.WriteLine("ADMIN_STATE_CHANGE_AUTH_BYPASS=CONFIRMED");
         }
     }
 }
