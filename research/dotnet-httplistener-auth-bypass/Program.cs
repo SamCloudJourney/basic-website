@@ -52,7 +52,7 @@ class Program
         return Encoding.ASCII.GetString(ms.ToArray());
     }
 
-    private static async Task<Observation> RunCaseAsync(string name, Func<int, string> requestFactory)
+    private static async Task<Observation> RunCaseAsync(string name, Func<int, string> requestFactory, bool selectorUsesUrlHost = false)
     {
         int port = FreePort();
 
@@ -70,7 +70,8 @@ class Program
             selectorUserHost = request.UserHostName ?? "<null>";
             selectorUrlHost = request.Url?.Host ?? "<null>";
 
-            string hostOnly = selectorUserHost.Split(':')[0];
+            string selectorAuthority = selectorUsesUrlHost ? selectorUrlHost : selectorUserHost;
+            string hostOnly = selectorAuthority.Split(':')[0];
             selectedScheme = string.Equals(hostOnly, "public.test", StringComparison.OrdinalIgnoreCase)
                 ? AuthenticationSchemes.Anonymous
                 : AuthenticationSchemes.Basic;
@@ -173,10 +174,22 @@ class Program
                  "Host: public.test\r\n" +
                  "Connection: close\r\n\r\n");
 
+        Observation urlSelectorControl = await RunCaseAsync(
+            "ABSOLUTE_ADMIN_HOST_PUBLIC_URL_SELECTOR_CONTROL",
+            p => $"GET http://admin.test:{p}/admin HTTP/1.1\r\n" +
+                 "Host: public.test\r\n" +
+                 "Connection: close\r\n\r\n",
+            selectorUsesUrlHost: true);
+
         Require(publicOrigin.FirstLine.Contains("200"), "public origin must remain accessible");
         Require(!publicOrigin.SentinelReturned, "public origin must not receive admin sentinel");
         Require(adminOrigin.FirstLine.Contains("401"), "ordinary admin origin must require Basic authentication");
         Require(!adminOrigin.SentinelReturned, "ordinary unauthenticated admin request must not receive admin sentinel");
+        Require(urlSelectorControl.FirstLine.Contains("401"), "Url.Host-based selector must challenge the conflicting admin authority");
+        Require(!urlSelectorControl.SentinelReturned, "Url.Host-based selector control must not disclose the admin sentinel");
+        Require(urlSelectorControl.SelectedScheme == AuthenticationSchemes.Basic,
+            "Url.Host-based selector must select Basic for admin authority");
+        Console.WriteLine("URL_HOST_SELECTOR_NEGATIVE_CONTROL=PASS");
 
         if (OperatingSystem.IsWindows())
         {
