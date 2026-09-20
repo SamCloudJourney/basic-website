@@ -1,0 +1,54 @@
+name: HttpListener cross-port current-main source regression
+
+on:
+  push:
+    branches:
+      - research/dotnet-httplistener-cross-port-current-main-20260920
+
+permissions:
+  contents: read
+
+jobs:
+  current-main:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkout exact current runtime source
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none https://github.com/dotnet/runtime.git runtime-src
+          cd runtime-src
+          git checkout 12921b1d8c6865a774232de9379133020ad23d79
+          echo "RUNTIME_SOURCE_HEAD=$(git rev-parse HEAD)"
+
+      - name: Install native prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libkrb5-dev liblttng-ust-dev
+
+      - name: Inject cross-port regression
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("runtime-src/src/libraries/System.Net.HttpListener/tests/HttpListenerAuthenticationTests.cs")
+          s=p.read_text()
+          snippet=Path("research/dotnet-cross-port-current-main-test.txt").read_text()
+          marker="        public async Task<HttpResponseMessage> AuthenticationFailure("
+          assert marker in s
+          p.write_text(s.replace(marker,snippet+marker,1))
+          PY
+
+      - name: Build CoreCLR and libraries testhost
+        working-directory: runtime-src
+        run: ./build.sh -subset clr+libs -c Release -rc Release
+
+      - name: Run current-main cross-port regression
+        working-directory: runtime-src
+        run: |
+          ./dotnet.sh build src/libraries/System.Net.HttpListener/tests/System.Net.HttpListener.Tests.csproj             -c Release             /t:Test             /p:XunitMethodName=System.Net.Tests.HttpListenerAuthenticationTests.AbsoluteFormPublicPortToAdminSocket_BypassesPerPortAuthentication
