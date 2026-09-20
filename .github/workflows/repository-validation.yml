@@ -37,7 +37,7 @@ jobs:
       - name: Write focused integration harness
         working-directory: vscode
         run: |
-          cat > /tmp/vscode-localhost-redirect.mjs <<'EOF'
+          cat > ./vscode-localhost-redirect.mjs <<'EOF'
           import http from 'node:http';
           import os from 'node:os';
           import assert from 'node:assert/strict';
@@ -139,4 +139,4 @@ jobs:
         working-directory: vscode
         run: |
           set -euxo pipefail
-          timeout 120s xvfb-run -a ./.build/electron/code-oss --no-sandbox /tmp/vscode-localhost-redirect.mjs
+          timeout 120s xvfb-run -a ./.build/electron/code-oss --no-sandbox ./vscode-localhost-redirect.mjs
