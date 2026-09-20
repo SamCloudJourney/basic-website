@@ -22,14 +22,14 @@ Console.WriteLine($"FRAMEWORK={System.Runtime.InteropServices.RuntimeInformation
 Console.WriteLine($"ADMIN_PORT={adminPort} PUBLIC_PORT={publicPort}");
 
 AuthenticationSchemes Select(HttpListenerRequest r) =>
-    string.Equals(r.UserHostName,$"localhost:{publicPort}",StringComparison.OrdinalIgnoreCase)
+    string.Equals(r.UserHostName,$"127.0.0.1:{publicPort}",StringComparison.OrdinalIgnoreCase)
         ? AuthenticationSchemes.Anonymous : AuthenticationSchemes.Basic;
 
 async Task<(HttpListener pub,HttpListener adm)> StartPair()
 {
     var pub=new HttpListener();var adm=new HttpListener();
-    pub.Prefixes.Add($"http://localhost:{publicPort}/");
-    adm.Prefixes.Add($"http://localhost:{adminPort}/");
+    pub.Prefixes.Add($"http://127.0.0.1:{publicPort}/");
+    adm.Prefixes.Add($"http://127.0.0.1:{adminPort}/");
     pub.AuthenticationSchemes=AuthenticationSchemes.None;adm.AuthenticationSchemes=AuthenticationSchemes.None;
     pub.Realm="public-port";adm.Realm="admin-port";
     pub.AuthenticationSchemeSelectorDelegate=Select;adm.AuthenticationSchemeSelectorDelegate=Select;
@@ -40,7 +40,7 @@ async Task<(HttpListener pub,HttpListener adm)> StartPair()
 {
     var x=await StartPair();using var pub=x.pub;using var adm=x.adm;
     var pt=pub.GetContextAsync();var at=adm.GetContextAsync();using var c=Connect(publicPort);
-    string raw=$"GET /public HTTP/1.1\r\nHost: localhost:{publicPort}\r\nConnection: close\r\n\r\n";
+    string raw=$"GET /public HTTP/1.1\r\nHost: 127.0.0.1:{publicPort}\r\nConnection: close\r\n\r\n";
     await c.SendAsync(Encoding.ASCII.GetBytes(raw),SocketFlags.None);
     var ctx=await pt.WaitAsync(TimeSpan.FromSeconds(5));
     if(ctx.User is not null||at.IsCompletedSuccessfully)throw new Exception("public control");
@@ -52,7 +52,7 @@ async Task<(HttpListener pub,HttpListener adm)> StartPair()
 {
     var x=await StartPair();using var pub=x.pub;using var adm=x.adm;
     var pt=pub.GetContextAsync();var at=adm.GetContextAsync();using var c=Connect(adminPort);
-    string raw=$"POST /admin-action HTTP/1.1\r\nHost: localhost:{adminPort}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    string raw=$"POST /admin-action HTTP/1.1\r\nHost: 127.0.0.1:{adminPort}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     await c.SendAsync(Encoding.ASCII.GetBytes(raw),SocketFlags.None);
     var wt=ReadWire(c);var first=await Task.WhenAny(wt,pt,at).WaitAsync(TimeSpan.FromSeconds(5));
     if(!ReferenceEquals(first,wt))throw new Exception("admin control context delivered");
@@ -77,8 +77,8 @@ async Task<(HttpListener pub,HttpListener adm)> StartPair()
     };
     var pt=pub.GetContextAsync();var at=adm.GetContextAsync();using var c=Connect(adminPort);
     string raw=
-        $"POST http://localhost:{publicPort}/admin-action HTTP/1.1\r\n"+
-        $"Host: localhost:{publicPort}\r\n"+
+        $"POST http://127.0.0.1:{publicPort}/admin-action HTTP/1.1\r\n"+
+        $"Host: 127.0.0.1:{publicPort}\r\n"+
         "Content-Length: 0\r\nConnection: close\r\n\r\n";
     await c.SendAsync(Encoding.ASCII.GetBytes(raw),SocketFlags.None);
 
@@ -96,7 +96,7 @@ async Task<(HttpListener pub,HttpListener adm)> StartPair()
         var ctx=await at;
         if(pc!=0||ac!=1||chosen!=AuthenticationSchemes.Anonymous||ctx.User is not null)throw new Exception("port-only bypass invariant failed");
         if(ctx.Request.Url?.Port!=adminPort)throw new Exception("Url port was not rewritten to local admin port");
-        if(!string.Equals(ctx.Request.UserHostName,$"localhost:{publicPort}",StringComparison.OrdinalIgnoreCase))throw new Exception("selector did not retain public authority");
+        if(!string.Equals(ctx.Request.UserHostName,$"127.0.0.1:{publicPort}",StringComparison.OrdinalIgnoreCase))throw new Exception("selector did not retain public authority");
         byte[] body=Encoding.ASCII.GetBytes("PORT_ONLY_ADMIN_ACTION_EXECUTED=true\n");
         ctx.Response.StatusCode=200;ctx.Response.ContentLength64=body.Length;await ctx.Response.OutputStream.WriteAsync(body);ctx.Response.Close();
         string wire=await wt;
