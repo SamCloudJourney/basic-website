@@ -6,6 +6,7 @@ TARGETS = [
     ("NGINX", 18080),
     ("HAPROXY", 18082),
     ("APACHE", 18083),
+    ("VARNISH", 18090),
 ]
 
 CASES = [
