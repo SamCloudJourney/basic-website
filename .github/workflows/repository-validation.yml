@@ -33,7 +33,7 @@ jobs:
       - name: Install native prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y libkrb5-dev
+          sudo apt-get install -y libkrb5-dev libx11-dev libxkbfile-dev pkg-config
 
       - name: Install and transpile
         working-directory: vscode
