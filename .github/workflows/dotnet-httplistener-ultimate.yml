@@ -1,0 +1,62 @@
+name: HttpListener ultimate framework auth bypass terminal
+
+on:
+  push:
+    branches:
+      - research/dotnet-httplistener-ultimate-terminal-20260920
+
+permissions:
+  contents: read
+
+jobs:
+  proof:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-net8, os: ubuntu-24.04, sdk: "8.0.x", tfm: "8.0" }
+          - { name: linux-net9, os: ubuntu-24.04, sdk: "9.0.x", tfm: "9.0" }
+          - { name: linux-net10, os: ubuntu-24.04, sdk: "10.0.x", tfm: "10.0" }
+          - { name: macos-net10, os: macos-15, sdk: "10.0.x", tfm: "10.0" }
+          - { name: windows-net10, os: windows-2025, sdk: "10.0.x", tfm: "10.0" }
+          - { name: linux-net11-rc1, os: ubuntu-24.04, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+          - { name: macos-net11-rc1, os: macos-15, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+          - { name: windows-net11-rc1, os: windows-2025, sdk: "11.0.100-rc.1.26425.128", tfm: "11.0" }
+
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ matrix.sdk }}'
+
+      - name: Map synthetic authorities on Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: echo "127.0.0.1 public.test admin.test" | sudo tee -a /etc/hosts
+
+      - name: Map synthetic authorities on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "`n127.0.0.1 public.test admin.test"
+
+      - name: Pin TFM
+        shell: bash
+        working-directory: research/dotnet-httplistener-ultimate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("ultimate.csproj")
+          p.write_text(p.read_text().replace("<TargetFramework>net10.0</TargetFramework>","<TargetFramework>net${{ matrix.tfm }}</TargetFramework>"))
+          PY
+
+      - name: Runtime info
+        run: dotnet --info
+
+      - name: Run ultimate protected-operation proof
+        working-directory: research/dotnet-httplistener-ultimate
+        run: dotnet run -c Release
