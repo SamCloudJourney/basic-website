@@ -148,7 +148,7 @@ jobs:
           from pathlib import Path
           p = Path("src/vs/platform/webContentExtractor/test/electron-main/webPageLoader.test.ts")
           s = p.read_text()
-          marker = "\t//#region Redirect Tests\\n"
+          marker = "//#region Redirect Tests"
           lines = [
               "\t test('localhost redirect is implicitly trusted while equivalent non-local redirect is blocked', async () => {",
               "\t\tconst source = URI.parse('https://attacker.example/start');",
@@ -171,8 +171,11 @@ jobs:
               ""
           ]
           test = "\\n".join(lines)
-          assert marker in s
-          p.write_text(s.replace(marker, marker + test, 1))
+          pos = s.find(marker)
+          assert pos >= 0
+          line_end = s.find("\\n", pos)
+          assert line_end >= 0
+          p.write_text(s[:line_end + 1] + test + s[line_end + 1:])
           PY
           npm run transpile-client
 
