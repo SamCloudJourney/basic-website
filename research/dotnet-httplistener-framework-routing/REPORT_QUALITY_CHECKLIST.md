@@ -21,6 +21,9 @@
 - [x] .NET 10.0.12 Linux
 - [x] .NET 10.0.12 macOS
 - [x] .NET 10.0.12 Windows negative control
+- [x] .NET 11.0.0-rc.1 Linux
+- [x] .NET 11.0.0-rc.1 macOS
+- [x] .NET 11.0.0-rc.1 Windows/http.sys negative control
 
 ## Independent proof shapes
 
