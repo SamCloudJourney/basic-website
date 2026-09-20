@@ -27,6 +27,26 @@ jobs:
         working-directory: research/dotnet-httplistener
         run: dotnet run -c Release
 
+  supported-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        tfm: ["8.0", "9.0", "10.0"]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ matrix.tfm }}.x'
+      - name: Run against latest supported patch
+        working-directory: research/dotnet-httplistener
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet run -c Release -p:TargetFramework=net${{ matrix.tfm }}
+
   boundary-chain:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -36,10 +56,10 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install nginx HAProxy and Apache
+      - name: Install nginx HAProxy Apache and Varnish
         run: |
           sudo apt-get update
-          sudo apt-get install -y nginx haproxy apache2
+          sudo apt-get install -y nginx haproxy apache2 varnish
           sudo a2enmod proxy proxy_http rewrite headers
           sudo systemctl stop apache2 || true
 
@@ -176,6 +196,39 @@ jobs:
           sudo /usr/sbin/apache2 -f /tmp/apache.conf -DFOREGROUND >/tmp/apache.log 2>&1 &
           sleep 2
 
+      - name: Configure Varnish baseline and Host ACL
+        shell: bash
+        run: |
+          cat >/tmp/varnish-baseline.vcl <<'EOF'
+          vcl 4.1;
+          backend default {
+            .host = "127.0.0.1";
+            .port = "18081";
+          }
+          sub vcl_recv {
+            return (pass);
+          }
+          EOF
+
+          cat >/tmp/varnish-acl.vcl <<'EOF'
+          vcl 4.1;
+          backend default {
+            .host = "127.0.0.1";
+            .port = "18081";
+          }
+          sub vcl_recv {
+            if (req.http.host != "public.test") {
+              return (synth(403, "Host denied"));
+            }
+            return (pass);
+          }
+          EOF
+
+          mkdir -p /tmp/varnish1 /tmp/varnish2
+          sudo varnishd -a 127.0.0.1:18090 -f /tmp/varnish-baseline.vcl -s malloc,64m -n /tmp/varnish1
+          sudo varnishd -a 127.0.0.1:18091 -f /tmp/varnish-acl.vcl -s malloc,64m -n /tmp/varnish2
+          sleep 2
+
       - name: Execute authority and path boundary matrix
         shell: bash
         run: |
@@ -193,3 +246,5 @@ jobs:
           echo '--- apache logs ---'
           cat /tmp/apache.log || true
           cat /tmp/apache-error.log || true
+          echo '--- varnish process state ---'
+          ps aux | grep '[v]arnish' || true
