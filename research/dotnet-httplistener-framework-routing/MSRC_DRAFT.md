@@ -69,10 +69,18 @@ Confirmed vulnerable:
 - .NET 9.0.20 / Ubuntu 24.04.5
 - .NET 10.0.12 / Ubuntu 24.04.5
 - .NET 10.0.12 / macOS 15.7.9
+- .NET 11.0.0-rc.1.26425.128 / Ubuntu 24.04.5
+- .NET 11.0.0-rc.1.26425.128 / macOS 15.7.9
 
-Negative control:
+Negative controls:
 
 - .NET 10.0.12 / Windows 2025 / http.sys — 401 Basic, no admin context delivered
+- .NET 11.0.0-rc.1.26425.128 / Windows 2025 / http.sys — 401 Basic, no admin context delivered
+
+.NET 11 RC1 is a current go-live release candidate and is explicitly in scope under the .NET bounty program.
+
+RC1 matrix:
+https://github.com/SamCloudJourney/basic-website/actions/runs/35529474195
 
 Validated current runtime source commit:
 
