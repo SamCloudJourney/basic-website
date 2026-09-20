@@ -1,0 +1,182 @@
+name: Repository validation
+
+on:
+  push:
+    branches: [ research/vscode-validation-20260920 ]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      VSCODE_SHA: 832cf23c5887351668f61c8648eb9c2ec6ee7d23
+      TEST_FILE: src/vs/platform/agentHost/test/node/gitDiffOutputAutoApprove.regression.test.ts
+      RULE_FILE: src/vs/platform/terminal/common/autoApprove/gitAutoApproveRules.ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.20.0
+
+      - name: Checkout target
+        run: |
+          set -euxo pipefail
+          git clone --filter=blob:none https://github.com/microsoft/vscode.git vscode
+          cd vscode
+          git checkout "$VSCODE_SHA"
+          test "$(git rev-parse HEAD)" = "$VSCODE_SHA"
+          printf 'SHA=%s\nNODE=%s\nNPM=%s\nGIT=%s\n' "$(git rev-parse HEAD)" "$(node -v)" "$(npm -v)" "$(git --version)"
+
+      - name: Install and transpile
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          npm ci --no-audit --no-fund
+          npm run transpile-client
+
+      - name: Add real permission regression
+        working-directory: vscode
+        run: |
+          cat > "$TEST_FILE" <<'EOF'
+          import assert from 'assert';
+          import { mkdtempSync, realpathSync, rmSync } from 'fs';
+          import { tmpdir } from 'os';
+          import { DisposableStore } from '../../../../base/common/lifecycle.js';
+          import { join } from '../../../../base/common/path.js';
+          import { URI } from '../../../../base/common/uri.js';
+          import { ensureNoDisposablesAreLeakedInTestSuite } from '../../../../base/test/common/utils.js';
+          import { NullLogService } from '../../../log/common/log.js';
+          import { SessionStatus, ToolCallConfirmationReason, type SessionSummary } from '../../common/state/sessionState.js';
+          import { AgentConfigurationService } from '../../node/agentConfigurationService.js';
+          import { AgentHostStateManager } from '../../node/agentHostStateManager.js';
+          import { CommandAutoApprover } from '../../node/commandAutoApprover.js';
+          import { SessionPermissionManager, type IToolApprovalEvent } from '../../node/sessionPermissions.js';
+          import { createSessionDataService } from '../common/sessionTestHelpers.js';
+
+          suite('git diff output permission regression', () => {
+            const disposables = new DisposableStore();
+            const sessionUri = URI.from({ scheme: 'copilot', path: '/git-diff-output' }).toString();
+            let manager: AgentHostStateManager;
+            let configService: AgentConfigurationService;
+            let permissions: SessionPermissionManager;
+            let workDir: string;
+            let outsideDir: string;
+
+            function shellEvent(commandLine: string): IToolApprovalEvent {
+              return { toolCallId: 'tc', session: URI.parse(sessionUri), permissionKind: 'shell', toolInput: commandLine, shellLanguage: 'bash' };
+            }
+
+            setup(async () => {
+              workDir = realpathSync(mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), 'vscode-work-')));
+              outsideDir = realpathSync(mkdtempSync(join(process.env.RUNNER_TEMP || tmpdir(), 'vscode-out-')));
+              manager = disposables.add(new AgentHostStateManager(new NullLogService()));
+              configService = disposables.add(new AgentConfigurationService(manager, new NullLogService()));
+              permissions = disposables.add(new SessionPermissionManager(manager, {}, configService, new NullLogService(), createSessionDataService()));
+              await permissions.initialize();
+              const now = new Date().toISOString();
+              const summary: SessionSummary = {
+                resource: sessionUri, provider: 'copilot', title: 'repro', status: SessionStatus.Idle,
+                createdAt: now, modifiedAt: now, project: { uri: 'file:///project', displayName: 'Project' },
+                workingDirectories: [URI.file(workDir).toString()]
+              };
+              manager.createSession(summary);
+            });
+
+            teardown(() => {
+              disposables.clear();
+              rmSync(workDir, { recursive: true, force: true });
+              rmSync(outsideDir, { recursive: true, force: true });
+            });
+            ensureNoDisposablesAreLeakedInTestSuite();
+
+            test('differential', async () => {
+              const p = join(outsideDir, 'proof.patch');
+              const approver = disposables.add(new CommandAutoApprover(new NullLogService()));
+              await approver.initialize();
+              const commands = {
+                plain: 'git diff HEAD',
+                diffEq: `git diff --output="${p}" HEAD`,
+                diffSpace: `git diff --output "${p}" HEAD`,
+                redirect: `git diff HEAD > "${p}"`,
+                log: `git log --output="${p}" -1`,
+                show: `git show --output="${p}" HEAD`
+              };
+              const rule = {
+                plain: approver.shouldAutoApprove(commands.plain),
+                diffEq: approver.shouldAutoApprove(commands.diffEq),
+                diffSpace: approver.shouldAutoApprove(commands.diffSpace),
+                log: approver.shouldAutoApprove(commands.log),
+                show: approver.shouldAutoApprove(commands.show)
+              };
+              const conv = (v: unknown) => v === ToolCallConfirmationReason.NotNeeded ? 'not-needed' : v === undefined ? 'confirmation-required' : String(v);
+              const permission = {
+                plain: conv(await permissions.getAutoApproval(shellEvent(commands.plain), sessionUri)),
+                diffEq: conv(await permissions.getAutoApproval(shellEvent(commands.diffEq), sessionUri)),
+                diffSpace: conv(await permissions.getAutoApproval(shellEvent(commands.diffSpace), sessionUri)),
+                redirect: conv(await permissions.getAutoApproval(shellEvent(commands.redirect), sessionUri)),
+                log: conv(await permissions.getAutoApproval(shellEvent(commands.log), sessionUri)),
+                show: conv(await permissions.getAutoApproval(shellEvent(commands.show), sessionUri))
+              };
+              console.log('RULE_LAYER=' + JSON.stringify(rule));
+              console.log('PERMISSION_LAYER=' + JSON.stringify(permission));
+              assert.strictEqual(rule.plain, 'approved');
+            });
+          });
+          EOF
+          npm run transpile-client
+
+      - name: Baseline and BEFORE
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          npm run test-node -- --run src/vs/platform/agentHost/test/node/commandAutoApprover.test.ts
+          npm run test-node -- --run src/vs/platform/agentHost/test/node/sessionPermissions.test.ts
+          npm run test-node -- --run "$TEST_FILE"
+
+      - name: Harmless Git sink
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          ROOT="$(mktemp -d)"
+          mkdir -p "$ROOT/work" "$ROOT/outside"
+          cd "$ROOT/work"
+          git init
+          git config user.email repro@example.invalid
+          git config user.name Repro
+          printf 'before\n' > f.txt
+          git add f.txt
+          git commit -m base
+          printf 'after\n' >> f.txt
+          printf 'SENTINEL\n' > "$ROOT/outside/proof.patch"
+          git diff --output="$ROOT/outside/proof.patch"
+          test -s "$ROOT/outside/proof.patch"
+          ! grep -q SENTINEL "$ROOT/outside/proof.patch"
+          echo "SINK_SHA256=$(sha256sum "$ROOT/outside/proof.patch" | awk '{print $1}')"
+          head -10 "$ROOT/outside/proof.patch"
+
+      - name: Apply one-line fix
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("src/vs/platform/terminal/common/autoApprove/gitAutoApproveRules.ts")
+          s=p.read_text()
+          a="\t'/^git(\\\\s+(-(?-i:C)\\\\s+\\\\S+|--no-pager))*\\\\s+diff\\\\b/': true,\n"
+          d="\t'/^git(\\\\s+(-(?-i:C)\\\\s+\\\\S+|--no-pager))*\\\\s+diff\\\\b.*\\\\s--output(=|\\\\s|$)/': false,\n"
+          assert s.count(a)==1
+          p.write_text(s.replace(a,a+d,1))
+          PY
+          git diff -- "$RULE_FILE"
+          npm run transpile-client
+
+      - name: AFTER
+        working-directory: vscode
+        run: |
+          set -euxo pipefail
+          npm run test-node -- --run src/vs/platform/agentHost/test/node/commandAutoApprover.test.ts
+          npm run test-node -- --run src/vs/platform/agentHost/test/node/sessionPermissions.test.ts
+          npm run test-node -- --run "$TEST_FILE"
