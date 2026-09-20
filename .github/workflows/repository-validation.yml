@@ -33,6 +33,9 @@ jobs:
           npm ci --no-audit --no-fund
           npm run transpile-client
           npm run electron
+          sudo chown root:root .build/electron/chrome-sandbox
+          sudo chmod 4755 .build/electron/chrome-sandbox
+          ls -l .build/electron/chrome-sandbox
 
       - name: Inject authorized regression tests
         working-directory: vscode
