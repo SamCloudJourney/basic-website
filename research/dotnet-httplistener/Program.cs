@@ -180,6 +180,58 @@ class Program
         listener.Stop();
     }
 
+
+    static async Task RunAuthorityCase(string name, Func<int, string> makeRequest)
+    {
+        int port = await FreePort();
+        using var listener = new HttpListener();
+        listener.Prefixes.Add($"http://*:{port}/");
+        listener.Start();
+
+        Task<HttpListenerContext> contextTask = listener.GetContextAsync();
+        using var client = new TcpClient();
+        await client.ConnectAsync(IPAddress.Loopback, port);
+        using NetworkStream ns = client.GetStream();
+
+        string raw = makeRequest(port);
+        await ns.WriteAsync(Encoding.ASCII.GetBytes(raw));
+        await ns.FlushAsync();
+
+        Task<string> responseTask = ReadSome(ns);
+        Task first = await Task.WhenAny(contextTask, responseTask, Task.Delay(3000));
+
+        if (first == contextTask && contextTask.IsCompletedSuccessfully)
+        {
+            HttpListenerContext ctx = await contextTask;
+            string hostHeader = ctx.Request.Headers["Host"] ?? "<null>";
+            string userHost = ctx.Request.UserHostName ?? "<null>";
+            string urlHost = ctx.Request.Url?.Host ?? "<null>";
+            bool confusion = userHost.StartsWith("public.test", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(urlHost, "admin.test", StringComparison.OrdinalIgnoreCase);
+
+            string result = $"AUTH_CASE={name} RESULT=CONTEXT HOSTHDR={hostHeader} USERHOST={userHost} URLHOST={urlHost} RAWURL={ctx.Request.RawUrl} CONFUSION={confusion}";
+            Console.WriteLine(result);
+
+            byte[] body = Encoding.ASCII.GetBytes((confusion ? "AUTHORITY_CONFUSION_SENTINEL_71c4\n" : "") + result + "\n");
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentLength64 = body.Length;
+            await ctx.Response.OutputStream.WriteAsync(body);
+            ctx.Response.Close();
+        }
+        else if (first == responseTask)
+        {
+            string response = await responseTask;
+            string firstLine = response.Split(new[]{"\r\n","\n"}, StringSplitOptions.None)[0];
+            Console.WriteLine($"AUTH_CASE={name} RESULT=RESPONSE FIRSTLINE={firstLine}");
+        }
+        else
+        {
+            Console.WriteLine($"AUTH_CASE={name} RESULT=TIMEOUT");
+        }
+
+        listener.Stop();
+    }
+
     static async Task Main(string[] args)
     {
         if (args.Length > 0 && args[0] == "--server")
@@ -242,6 +294,27 @@ class Program
         {
             try { await RunChunkCase(chunkCase.Name, chunkCase.Line); }
             catch(Exception ex) { Console.WriteLine($"CHUNK_CASE={chunkCase.Name} RESULT=EXCEPTION TYPE={ex.GetType().Name} MSG={ex.Message.Replace("\r"," ").Replace("\n"," ")}"); }
+        }
+
+        var authorityCases = new (string Name, Func<int,string> MakeRequest)[]
+        {
+            ("ORIGIN_PUBLIC", p =>
+                $"GET /authority HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
+
+            ("ABS_ADMIN_HOST_PUBLIC", p =>
+                $"GET http://admin.test:{p}/authority HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
+
+            ("ABS_PUBLIC_HOST_ADMIN", p =>
+                $"GET http://public.test:{p}/authority HTTP/1.1\r\nHost: admin.test\r\nConnection: close\r\n\r\n"),
+
+            ("ABS_USERINFO_PUBLIC_AT_ADMIN", p =>
+                $"GET http://public.test@admin.test:{p}/authority HTTP/1.1\r\nHost: public.test\r\nConnection: close\r\n\r\n"),
+        };
+
+        foreach (var authorityCase in authorityCases)
+        {
+            try { await RunAuthorityCase(authorityCase.Name, authorityCase.MakeRequest); }
+            catch(Exception ex) { Console.WriteLine($"AUTH_CASE={authorityCase.Name} RESULT=EXCEPTION TYPE={ex.GetType().Name} MSG={ex.Message.Replace("\r"," ").Replace("\n"," ")}"); }
         }
     }
 }
