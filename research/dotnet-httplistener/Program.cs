@@ -42,7 +42,7 @@ class Program
         {
             var ctx = await contextTask;
             string[]? hosts = ctx.Request.Headers.GetValues("Host");
-            Console.WriteLine($"CASE={c.Name} RESULT=CONTEXT HOST={ctx.Request.UserHostName} URLHOST={ctx.Request.Url?.Host} HOSTVALUES={string.Join("|", hosts ?? Array.Empty<string>())} METHOD={ctx.Request.HttpMethod} RAWURL={ctx.Request.RawUrl}");
+            Console.WriteLine($"CASE={c.Name} RESULT=CONTEXT HOST={ctx.Request.UserHostName} URLHOST={ctx.Request.Url?.Host} HOSTVALUES={string.Join("|", hosts ?? Array.Empty<string>())} METHOD={ctx.Request.HttpMethod} RAWURL={ctx.Request.RawUrl} ABSPATH={ctx.Request.Url?.AbsolutePath} LOCALPATH={ctx.Request.Url?.LocalPath}");
             ctx.Response.StatusCode = 204;
             ctx.Response.Close();
         }
@@ -88,7 +88,10 @@ class Program
             Console.WriteLine(line);
             Console.Out.Flush();
 
-            byte[] body = Encoding.UTF8.GetBytes(line + "\n");
+            string payload = string.Equals(ctx.Request.Url?.AbsolutePath, "/admin", StringComparison.Ordinal)
+                ? "ADMIN_SECRET_SENTINEL_9f6e\n" + line + "\n"
+                : line + "\n";
+            byte[] body = Encoding.UTF8.GetBytes(payload);
             ctx.Response.StatusCode = 200;
             ctx.Response.ContentType = "text/plain";
             ctx.Response.ContentLength64 = body.Length;
@@ -125,7 +128,16 @@ class Program
                 $"GET /lfhost HTTP/1.1\r\nHost: attacker.invalid\nHost: 127.0.0.1:{p}\r\nConnection: close\r\n\r\n"),
 
             new("TE_CL_BOTH", p =>
-                $"POST /tecl HTTP/1.1\r\nHost: 127.0.0.1:{p}\r\nContent-Length: 4\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n0\r\n\r\n")
+                $"POST /tecl HTTP/1.1\r\nHost: 127.0.0.1:{p}\r\nContent-Length: 4\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n0\r\n\r\n"),
+
+            new("DIRECT_ADMIN", p =>
+                $"GET /admin HTTP/1.1\r\nHost: 127.0.0.1:{p}\r\nConnection: close\r\n\r\n"),
+
+            new("ENCODED_DOTDOT_TO_ADMIN", p =>
+                $"GET /public/%2e%2e/admin HTTP/1.1\r\nHost: 127.0.0.1:{p}\r\nConnection: close\r\n\r\n"),
+
+            new("ENCODED_MIXED_DOTDOT_TO_ADMIN", p =>
+                $"GET /public/.%2e/admin HTTP/1.1\r\nHost: 127.0.0.1:{p}\r\nConnection: close\r\n\r\n")
         };
 
         foreach (var c in cases)
