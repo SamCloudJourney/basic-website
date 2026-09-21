@@ -1,0 +1,18 @@
+name: Blazor identity redirect backslash differential
+on:
+  push:
+    branches: [research/blazor-identity-redirect-backslash-20260921]
+permissions: {contents: read}
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: {dotnet-version: '10.0.x'}
+      - name: .NET guard semantics
+        working-directory: research/blazor-identity-redirect-backslash
+        run: dotnet run -c Release
+      - name: WHATWG URL semantics
+        working-directory: research/blazor-identity-redirect-backslash
+        run: node browser-url-probe.mjs
