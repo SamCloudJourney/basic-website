@@ -42,7 +42,8 @@ internal static class Program
         {
             return RunMediumImpersonatedAttacker(
                 serverPid: int.Parse(args[1]),
-                expectedParentPid: int.Parse(args[2]));
+                expectedParentPid: int.Parse(args[2]),
+                sdkMajor: int.Parse(args[3]));
         }
 
         return await RunParentAsync();
@@ -91,7 +92,7 @@ internal static class Program
         var attackerStart = new ProcessStartInfo
         {
             FileName = dotnet,
-            Arguments = $"\"{dll}\" attacker-medium {server.Id} {Environment.ProcessId}",
+            Arguments = $"\"{dll}\" attacker-medium {server.Id} {Environment.ProcessId} {selectedSdkMajor}",
             UseShellExecute = false,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -335,7 +336,7 @@ internal static class Program
     }
 
 
-    private static int RunMediumImpersonatedAttacker(int serverPid, int expectedParentPid)
+    private static int RunMediumImpersonatedAttacker(int serverPid, int expectedParentPid, int sdkMajor)
     {
         IntPtr mediumImpersonationToken = CreateMediumRestrictedImpersonationToken();
         try
@@ -346,7 +347,7 @@ internal static class Program
             }
 
             Console.WriteLine("MEDIUM_THREAD_IMPERSONATION_ACTIVE=True");
-            return RunAttackerSync(serverPid, expectedParentPid);
+            return RunAttackerSync(serverPid, expectedParentPid, sdkMajor);
         }
         finally
         {
@@ -358,7 +359,7 @@ internal static class Program
         }
     }
 
-    private static int RunAttackerSync(int serverPid, int expectedParentPid)
+    private static int RunAttackerSync(int serverPid, int expectedParentPid, int sdkMajor)
     {
         Console.WriteLine($"EXPECTED_PARENT_PID={expectedParentPid}");
         Console.WriteLine($"ATTACKER_PID={Environment.ProcessId}");
@@ -384,8 +385,9 @@ internal static class Program
 
         Console.WriteLine($"ATTACKER_DIRECT_HKLM_WRITE_ALLOWED={directWriteAllowed}");
 
-        string dispatchPipeName = CreatePipeName(serverPid);
-        string logPipeName = CreatePipeName(serverPid, "log");
+        Console.WriteLine($"ATTACKER_TARGET_SDK_MAJOR={sdkMajor}");
+        string dispatchPipeName = CreatePipeName(serverPid, sdkMajor);
+        string logPipeName = CreatePipeName(serverPid, sdkMajor, "log");
         Console.WriteLine($"DISPATCH_PIPE={dispatchPipeName}");
         Console.WriteLine($"LOG_PIPE={logPipeName}");
 
