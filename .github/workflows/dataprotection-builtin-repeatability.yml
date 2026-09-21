@@ -23,6 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
+          dotnet restore
           passed=0
           for i in $(seq 1 10); do
             dotnet run -c Release --no-restore 2>&1 | tee "/tmp/default-$i.log"
