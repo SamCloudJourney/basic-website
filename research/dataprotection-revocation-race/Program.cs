@@ -195,7 +195,7 @@ sealed class BlockingXmlRepository : IXmlRepository
     private int _blockNextRead;
 
     public ManualResetEventSlim RefreshReadEntered { get; } = new(false);
-    private ManualResetEventSlim ReleaseRefreshRead { get; } = new(false);
+    private ManualResetEventSlim _releaseRefreshRead = new(false);
 
     public int Count
     {
@@ -222,14 +222,14 @@ sealed class BlockingXmlRepository : IXmlRepository
     public void BlockNextRead()
     {
         RefreshReadEntered.Reset();
-        ReleaseRefreshRead.Dispose();
-        ReleaseRefreshRead = new ManualResetEventSlim(false);
+        _releaseRefreshRead.Dispose();
+        _releaseRefreshRead = new ManualResetEventSlim(false);
         Interlocked.Exchange(ref _blockNextRead, 1);
     }
 
     public void ReleaseBlockedRead()
     {
-        ReleaseRefreshRead.Set();
+        _releaseRefreshRead.Set();
     }
 
     public IReadOnlyCollection<XElement> GetAllElements()
@@ -239,7 +239,7 @@ sealed class BlockingXmlRepository : IXmlRepository
             Console.WriteLine("REPOSITORY_GET_ALL_ELEMENTS=BLOCKING_REFRESH");
             RefreshReadEntered.Set();
 
-            if (!ReleaseRefreshRead.Wait(TimeSpan.FromSeconds(20)))
+            if (!_releaseRefreshRead.Wait(TimeSpan.FromSeconds(20)))
             {
                 throw new TimeoutException("Controlled repository refresh was not released.");
             }
