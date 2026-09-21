@@ -11,9 +11,11 @@ using Microsoft.AspNetCore.DataProtection.Repositories;
 
 const string SyncSwitch = "Microsoft.AspNetCore.DataProtection.KeyManagement.DisableAsyncKeyRingUpdate";
 bool syncGuard = args.Contains("--sync", StringComparer.Ordinal);
+bool expectSafeDefault = args.Contains("--expect-safe-default", StringComparer.Ordinal);
+bool expectBlocking = syncGuard || expectSafeDefault;
 AppContext.SetSwitch(SyncSwitch, syncGuard);
 
-Console.WriteLine($"MODE={(syncGuard ? "SYNC_GUARD" : "DEFAULT_ASYNC")}");
+Console.WriteLine($"MODE={(syncGuard ? "SYNC_GUARD" : expectSafeDefault ? "DEFAULT_SAFE" : "DEFAULT_ASYNC")}");
 Console.WriteLine($"FRAMEWORK={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
 Console.WriteLine($"OS={Environment.OSVersion}");
 
@@ -157,7 +159,7 @@ bool firstCompletedWhileBlocked = ReferenceEquals(firstWinner, firstAfterRevoke)
 
 Console.WriteLine($"FIRST_COOKIE_REQUEST_COMPLETED_WHILE_REFRESH_BLOCKED={firstCompletedWhileBlocked}");
 
-if (!syncGuard)
+if (!expectBlocking)
 {
     if (!firstCompletedWhileBlocked)
     {
@@ -261,7 +263,8 @@ else
         throw new Exception($"Sync guard unexpectedly completed while refresh blocked with HTTP {(int)early.StatusCode}.");
     }
 
-    Console.WriteLine("SYNC_GUARD_COOKIE_REQUEST_BLOCKED_UNTIL_REFRESH=True");
+    string safePrefix = syncGuard ? "SYNC_GUARD" : "DEFAULT_SAFE";
+    Console.WriteLine($"{safePrefix}_COOKIE_REQUEST_BLOCKED_UNTIL_REFRESH=True");
 
     repository.ReleaseBlockedRead();
 
@@ -269,21 +272,21 @@ else
         await firstAfterRevoke.WaitAsync(TimeSpan.FromSeconds(10));
     string body = await response.Content.ReadAsStringAsync();
 
-    Console.WriteLine($"SYNC_GUARD_POST_REFRESH_STATUS={(int)response.StatusCode}");
-    Console.WriteLine($"SYNC_GUARD_POST_REFRESH_BODY={body}");
+    Console.WriteLine($"{safePrefix}_POST_REFRESH_STATUS={(int)response.StatusCode}");
+    Console.WriteLine($"{safePrefix}_POST_REFRESH_BODY={body}");
 
     int executionsAfterRevoke =
         Volatile.Read(ref protectedExecutions) - baselineExecutions;
-    Console.WriteLine($"SYNC_GUARD_PROTECTED_EXECUTIONS_AFTER_REVOKE={executionsAfterRevoke}");
+    Console.WriteLine($"{safePrefix}_PROTECTED_EXECUTIONS_AFTER_REVOKE={executionsAfterRevoke}");
 
     if (response.StatusCode != HttpStatusCode.Unauthorized ||
         executionsAfterRevoke != 0)
     {
-        throw new Exception("Sync guard failed to reject revoked authentication cookie.");
+        throw new Exception("Blocking control failed to reject revoked authentication cookie.");
     }
 
-    Console.WriteLine("SYNC_GUARD_REVOKED_COOKIE_REJECTED=True");
-    Console.WriteLine("COOKIE_REVOCATION_SYNC_CONTROL=PASS");
+    Console.WriteLine($"{safePrefix}_REVOKED_COOKIE_REJECTED=True");
+    Console.WriteLine(syncGuard ? "COOKIE_REVOCATION_SYNC_CONTROL=PASS" : "COOKIE_REVOCATION_DEFAULT_SAFE_CONTROL=PASS");
 }
 
 await app.StopAsync();
