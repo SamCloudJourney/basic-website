@@ -1,0 +1,32 @@
+name: DataProtection emergency RevokeAllKeys first-request
+
+on:
+  push:
+    branches:
+      - research/dataprotection-cookie-first-request-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  revoke-all:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate mass-revocation behavior
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet run -c Release -- --revoke-all | tee result.log
+          grep -F 'REVOCATION_MODE=ALL_KEYS' result.log
+          grep -F 'REVOCATION_FILE_COUNT=1' result.log
+          grep -F 'FIRST_POST_REVOKE_STATUS=200' result.log
+          grep -F 'FIRST_POST_REVOKE_COOKIE_ACCEPTED=CONFIRMED' result.log
+          grep -F 'SECOND_POST_REVOKE_STATUS=401' result.log
+          grep -F 'BUILTIN_REPOSITORY_FIRST_REQUEST_WINDOW=PASS' result.log
