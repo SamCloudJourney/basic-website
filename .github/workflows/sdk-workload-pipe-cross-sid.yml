@@ -27,14 +27,22 @@ jobs:
           dotnet --version
           dotnet build research/sdk-workload-pipe-pid-binding/PipeHijackProbe.csproj -c Release
 
+      - name: Enumerate low-privilege process identities
+        shell: pwsh
+        run: |
+          Get-Process -IncludeUserName -ErrorAction SilentlyContinue |
+            Select-Object Id, ProcessName, UserName |
+            Sort-Object UserName, ProcessName |
+            Format-Table -AutoSize
+
       - name: Stage for low-privilege service identity
         shell: pwsh
         run: |
           $stage = 'C:\Users\Public\SdkPipeProbe'
           New-Item -ItemType Directory -Path $stage -Force | Out-Null
           Copy-Item "research\sdk-workload-pipe-pid-binding\bin\Release\net10.0\*" $stage -Recurse -Force
-          cmd /c "icacls \"$stage\" /grant *S-1-5-19:(OI)(CI)M /T /C"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to grant LocalService access to staged probe" }
+          & icacls.exe $stage /grant '*S-1-5-19:(OI)(CI)M' '*S-1-5-20:(OI)(CI)M' /T /C
+          if ($LASTEXITCODE -ne 0) { throw "Failed to grant service identities access to staged probe" }
 
       - name: Run LocalService to administrator broker boundary proof
         shell: pwsh
