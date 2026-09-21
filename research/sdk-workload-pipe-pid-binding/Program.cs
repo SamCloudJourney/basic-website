@@ -204,8 +204,12 @@ internal static class Program
     {
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(request);
         byte[] header = BitConverter.GetBytes(payload.Length);
-        await pipe.WriteAsync(header);
-        await pipe.WriteAsync(payload);
+        byte[] framed = new byte[header.Length + payload.Length];
+        Buffer.BlockCopy(header, 0, framed, 0, header.Length);
+        Buffer.BlockCopy(payload, 0, framed, header.Length, payload.Length);
+        // SDK PipeStreamMessageDispatcherBase performs one Read() per named-pipe message,
+        // so the length prefix and JSON payload must be emitted as one message.
+        await pipe.WriteAsync(framed);
         await pipe.FlushAsync();
 
         byte[] lengthBytes = new byte[4];
