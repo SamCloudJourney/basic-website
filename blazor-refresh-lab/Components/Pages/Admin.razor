@@ -1,0 +1,19 @@
+@page "/admin"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@attribute [Authorize(Roles = "Admin")]
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject AdminOperationProbe Probe
+
+<h1 id="admin">ADMIN</h1>
+<p id="secret">@AdminOperationProbe.AdminSecret</p>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = state.User.Identity?.Name ?? "anonymous";
+        var isAdmin = state.User.IsInRole("Admin");
+        Probe.Record(user, isAdmin);
+    }
+}
