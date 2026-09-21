@@ -408,6 +408,11 @@ internal static class Program
             return 3;
         }
 
+        // The product logger calls WaitForPipeDrain after each message. Consume log
+        // traffic so the elevated server can leave its constructor and dispatch requests.
+        using var logDrainCts = new CancellationTokenSource();
+        Task logDrain = Task.Run(() => DrainLogAsync(log, logDrainCts.Token));
+
         string markerPath = $@"SOFTWARE\Microsoft\dotnet\InstalledWorkloads\Standalone\{architecture}\{FeatureBand}\{MarkerWorkload}";
 
         string writeResponse = SendRequestSync(dispatch, new
@@ -435,6 +440,10 @@ internal static class Program
 
         string shutdownResponse = SendRequestSync(dispatch, new { RequestType = 0 });
         Console.WriteLine($"SHUTDOWN_RESPONSE={shutdownResponse}");
+
+        logDrainCts.Cancel();
+        try { log.Dispose(); } catch { }
+        try { logDrain.Wait(TimeSpan.FromSeconds(2)); } catch { }
 
         bool confirmed =
             Environment.ProcessId != expectedParentPid &&
