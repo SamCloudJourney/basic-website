@@ -105,9 +105,9 @@ foreach (var candidate in candidates)
         differences.Add(new
         {
             candidate,
-            origin.StatusLine,
+            OriginStatus = origin.StatusLine,
             Origin = TryParseObservation(origin.Body),
-            absolute.StatusLine,
+            AbsoluteStatus = absolute.StatusLine,
             Absolute = TryParseObservation(absolute.Body),
             originBody = origin.Body,
             absoluteBody = absolute.Body,
