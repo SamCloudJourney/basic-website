@@ -65,6 +65,31 @@ jobs:
           dotnet publish msi-control\ExecProbe.csproj -c Release -o msi-control\publish
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Direct-run negative control on exact probe binary
+        shell: pwsh
+        run: |
+          $probe = (Resolve-Path msi-control\publish\ExecProbe.exe).Path
+          $sourceHash = (Get-FileHash -Algorithm SHA256 $probe).Hash
+          Write-Host "SOURCE_PROBE_SHA256=$sourceHash"
+
+          $direct = Start-Process $probe -Wait -PassThru
+          Write-Host "DIRECT_PROBE_EXIT=$($direct.ExitCode)"
+
+          $directProof = Join-Path (Split-Path $probe -Parent) "execution-proof.txt"
+          if (-not (Test-Path $directProof)) { throw "Direct proof missing" }
+
+          $directLines = Get-Content $directProof
+          $directLines | ForEach-Object { Write-Host "DIRECT_CONTROL_$_" }
+          $directText = $directLines -join [Environment]::NewLine
+
+          if ($direct.ExitCode -ne 14) { throw "Direct probe unexpectedly had SYSTEM token" }
+          if ($directText -notmatch 'EXEC_PROBE_RAN=YES') { throw "Direct probe did not run" }
+          if ($directText -notmatch 'IS_SYSTEM=False') { throw "Direct negative control was not non-SYSTEM" }
+          if ($directText -match 'SID=S-1-5-18') { throw "Direct negative control unexpectedly ran as LocalSystem" }
+
+          Remove-Item $directProof -Force
+          Write-Host "DIRECT_SAME_BINARY_NON_SYSTEM_CONTROL=CONFIRMED"
+
       - name: Build unsigned per-machine MSI
         shell: pwsh
         run: |
@@ -124,14 +149,17 @@ jobs:
           }
 
           $sig = Get-AuthenticodeSignature -FilePath msi-control\control.msi
+          $msiHash = (Get-FileHash -Algorithm SHA256 msi-control\control.msi).Hash
           Write-Host "MSI_SIGNATURE_STATUS=$($sig.Status)"
+          Write-Host "MSI_SHA256=$msiHash"
           if ($sig.Status -ne "NotSigned") { throw "Expected unsigned MSI" }
 
       - name: Install and assert LocalSystem custom-action identity
         shell: pwsh
         run: |
           $msi = (Resolve-Path msi-control\control.msi).Path
-          $p = Start-Process msiexec.exe -ArgumentList @("/i", ('"' + $msi + '"'), "/qn", "/norestart") -Wait -PassThru
+          $log = (Join-Path (Resolve-Path msi-control).Path "install.log")
+          $p = Start-Process msiexec.exe -ArgumentList @("/i", ('"' + $msi + '"'), "/qn", "/norestart", "/l*v", ('"' + $log + '"')) -Wait -PassThru
           Write-Host "MSIEXEC_INSTALL_EXIT=$($p.ExitCode)"
           if ($p.ExitCode -ne 0) { throw "MSI install failed" }
 
@@ -142,6 +170,18 @@ jobs:
           $proof = $proofCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $proof) { throw "execution-proof.txt not found" }
 
+          $installDir = Split-Path $proof -Parent
+          $installedProbe = Join-Path $installDir "ExecProbe.exe"
+          if (-not (Test-Path $installedProbe)) { throw "Installed probe binary missing" }
+
+          $sourceProbe = (Resolve-Path msi-control\publish\ExecProbe.exe).Path
+          $sourceHash = (Get-FileHash -Algorithm SHA256 $sourceProbe).Hash
+          $installedHash = (Get-FileHash -Algorithm SHA256 $installedProbe).Hash
+          Write-Host "SOURCE_PROBE_SHA256_RECHECK=$sourceHash"
+          Write-Host "INSTALLED_PROBE_SHA256=$installedHash"
+          Write-Host "EXACT_PROBE_BINARY_HASH_MATCH=$($sourceHash -eq $installedHash)"
+          if ($sourceHash -ne $installedHash) { throw "Installed executable differs from direct-run executable" }
+
           $lines = Get-Content $proof
           $lines | ForEach-Object { Write-Host "SYSTEM_CONTROL_$_" }
           $text = $lines -join [Environment]::NewLine
@@ -151,6 +191,13 @@ jobs:
           if ($text -notmatch 'IS_SYSTEM=True') { throw "Probe did not confirm SYSTEM" }
 
           Write-Host "GENERIC_MSI_DEFERRED_NONIMPERSONATED_SYSTEM_EXECUTION=CONFIRMED"
+          Write-Host "SAME_BINARY_NON_SYSTEM_TO_SYSTEM_DIFFERENTIAL=CONFIRMED"
+
+          if (Test-Path $log) {
+            Select-String -Path $log -Pattern 'RunExecProbe|MSI \(s\)' |
+              Select-Object -First 20 |
+              ForEach-Object { Write-Host "MSI_LOG_$($_.Line)" }
+          }
 
           $u = Start-Process msiexec.exe -ArgumentList @("/x", ('"' + $msi + '"'), "/qn", "/norestart") -Wait -PassThru
           Write-Host "MSIEXEC_UNINSTALL_EXIT=$($u.ExitCode)"
