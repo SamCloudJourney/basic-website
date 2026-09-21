@@ -371,8 +371,6 @@ internal static class Program
 
     private static async Task<int> RunCrossSidServiceAsync(int sdkMajor)
     {
-        const string LowPrivilegeSid = "S-1-5-19"; // NT AUTHORITY\\LOCAL SERVICE
-
         string dotnet = Environment.ProcessPath ?? throw new InvalidOperationException("Environment.ProcessPath unavailable.");
         string dll = Assembly.GetExecutingAssembly().Location;
         string workingDirectory = Path.GetDirectoryName(dll) ?? Environment.CurrentDirectory;
@@ -385,7 +383,18 @@ internal static class Program
         Console.WriteLine($"CROSS_SID_SERVER_SID={serverSid}");
         Console.WriteLine($"CROSS_SID_SERVER_IS_ADMIN={serverAdmin}");
 
-        IntPtr lowPrivilegeToken = DuplicatePrimaryTokenForSid(LowPrivilegeSid);
+        string lowPrivilegeSid = "S-1-5-19";
+        IntPtr lowPrivilegeToken = DuplicatePrimaryTokenForSid(lowPrivilegeSid, throwOnFailure: false);
+        if (lowPrivilegeToken == IntPtr.Zero)
+        {
+            lowPrivilegeSid = "S-1-5-20";
+            lowPrivilegeToken = DuplicatePrimaryTokenForSid(lowPrivilegeSid, throwOnFailure: false);
+        }
+        if (lowPrivilegeToken == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Unable to duplicate a primary token for LocalService or NetworkService.");
+        }
+
         PROCESS_INFORMATION helperPi = default;
         PROCESS_INFORMATION serverPi = default;
         PROCESS_INFORMATION attackerPi = default;
@@ -445,7 +454,7 @@ internal static class Program
 
             bool confirmed =
                 serverAdmin &&
-                lowSid == LowPrivilegeSid &&
+                lowSid == lowPrivilegeSid &&
                 lowSid != serverSid &&
                 evidence.Contains($"OTS_ATTACKER_SID={lowSid}", StringComparison.Ordinal) &&
                 evidence.Contains("ATTACKER_DIRECT_HKLM_WRITE_ALLOWED=False", StringComparison.Ordinal) &&
@@ -474,33 +483,59 @@ internal static class Program
         }
     }
 
-    private static IntPtr DuplicatePrimaryTokenForSid(string targetSid)
+    private static IntPtr DuplicatePrimaryTokenForSid(string targetSid, bool throwOnFailure)
     {
         const uint TokenQuery = 0x0008;
         const uint TokenDuplicate = 0x0002;
         const uint MaximumAllowed = 0x02000000;
+        int matchingProcesses = 0;
 
         foreach (Process process in Process.GetProcesses())
         {
             IntPtr processHandle = IntPtr.Zero;
-            IntPtr token = IntPtr.Zero;
+            IntPtr queryToken = IntPtr.Zero;
+            IntPtr duplicateTokenSource = IntPtr.Zero;
+
             try
             {
                 processHandle = OpenProcess(OtsProcessQueryLimitedInformation, false, checked((uint)process.Id));
-                if (processHandle == IntPtr.Zero) continue;
-                if (!OpenProcessToken(processHandle, TokenQuery | TokenDuplicate, out token)) continue;
+                if (processHandle == IntPtr.Zero)
+                {
+                    continue;
+                }
 
-                using var identity = new WindowsIdentity(token);
-                if (!string.Equals(identity.User?.Value, targetSid, StringComparison.Ordinal)) continue;
+                // Query identity separately. Requesting TOKEN_DUPLICATE up front can hide
+                // the fact that the process is owned by the target low-privilege SID.
+                if (!OpenProcessToken(processHandle, TokenQuery, out queryToken))
+                {
+                    continue;
+                }
+
+                using var identity = new WindowsIdentity(queryToken);
+                if (!string.Equals(identity.User?.Value, targetSid, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                matchingProcesses++;
+                Console.WriteLine($"CROSS_SID_MATCH_PID={process.Id}");
+                Console.WriteLine($"CROSS_SID_MATCH_PROCESS={process.ProcessName}");
+
+                if (!OpenProcessToken(processHandle, TokenQuery | TokenDuplicate, out duplicateTokenSource))
+                {
+                    Console.WriteLine($"CROSS_SID_DUPLICATE_OPEN_ERROR={Marshal.GetLastWin32Error()}");
+                    continue;
+                }
 
                 if (!DuplicateTokenEx(
-                    token,
+                    duplicateTokenSource,
                     MaximumAllowed,
                     IntPtr.Zero,
                     SECURITY_IMPERSONATION_LEVEL.SecurityImpersonation,
                     TOKEN_TYPE.TokenPrimary,
                     out IntPtr primaryToken))
                 {
+                    Console.WriteLine($"CROSS_SID_DUPLICATE_TOKEN_ERROR={Marshal.GetLastWin32Error()}");
                     continue;
                 }
 
@@ -508,19 +543,30 @@ internal static class Program
                 Console.WriteLine($"CROSS_SID_TOKEN_SOURCE_NAME={process.ProcessName}");
                 return primaryToken;
             }
-            catch
+            catch (Exception ex)
             {
+                Console.WriteLine($"CROSS_SID_TOKEN_ENUM_ERROR={process.Id}:{ex.GetType().Name}");
             }
             finally
             {
-                if (token != IntPtr.Zero) CloseHandle(token);
+                if (duplicateTokenSource != IntPtr.Zero) CloseHandle(duplicateTokenSource);
+                if (queryToken != IntPtr.Zero) CloseHandle(queryToken);
                 if (processHandle != IntPtr.Zero) CloseHandle(processHandle);
                 process.Dispose();
             }
         }
 
-        throw new InvalidOperationException($"Unable to duplicate a primary token for SID {targetSid}.");
+        Console.WriteLine($"CROSS_SID_TARGET={targetSid}");
+        Console.WriteLine($"CROSS_SID_MATCHING_PROCESS_COUNT={matchingProcesses}");
+
+        if (throwOnFailure)
+        {
+            throw new InvalidOperationException($"Unable to duplicate a primary token for SID {targetSid}.");
+        }
+
+        return IntPtr.Zero;
     }
+
     private static async Task<int> RunCrossUserOtsAsync(string standardUserName, string standardUserPassword, int sdkMajor)
     {
         string dotnet = Environment.ProcessPath ?? throw new InvalidOperationException("Environment.ProcessPath unavailable.");
