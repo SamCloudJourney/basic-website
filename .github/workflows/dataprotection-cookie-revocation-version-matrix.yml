@@ -1,0 +1,89 @@
+name: DataProtection cookie revocation version matrix
+
+on:
+  push:
+    branches:
+      - research/dataprotection-cookie-revocation-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  supported:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tfm: '8.0'
+            mode: safe
+          - tfm: '9.0'
+            mode: vulnerable
+          - tfm: '10.0'
+            mode: vulnerable
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ matrix.tfm }}.x'
+
+      - name: Retarget app
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("dataprotection-cookie-revocation.csproj")
+          s=p.read_text().replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net${{ matrix.tfm }}</TargetFramework>")
+          p.write_text(s)
+          PY
+
+      - name: Validate release behavior
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          if [ "${{ matrix.mode }}" = "safe" ]; then
+            dotnet run -c Release -- --expect-safe-default | tee /tmp/result.log
+            grep -F 'DEFAULT_SAFE_COOKIE_REQUEST_BLOCKED_UNTIL_REFRESH=True' /tmp/result.log
+            grep -F 'DEFAULT_SAFE_PROTECTED_EXECUTIONS_AFTER_REVOKE=0' /tmp/result.log
+            grep -F 'COOKIE_REVOCATION_DEFAULT_SAFE_CONTROL=PASS' /tmp/result.log
+          else
+            dotnet run -c Release | tee /tmp/result.log
+            grep -F 'REVOKED_AUTH_COOKIE_ACCEPTED_WHILE_REFRESH_BLOCKED=CONFIRMED' /tmp/result.log
+            grep -F 'REVOKED_COOKIE_BURST_200_COUNT=12' /tmp/result.log
+            grep -F 'AFTER_REFRESH_OLD_COOKIE_REJECTED=True' /tmp/result.log
+          fi
+
+  rc1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100-rc.1.26425.128'
+
+      - name: Retarget app
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("dataprotection-cookie-revocation.csproj")
+          s=p.read_text().replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net11.0</TargetFramework>")
+          p.write_text(s)
+          PY
+
+      - name: Validate RC behavior
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet run -c Release | tee /tmp/result.log
+          grep -F 'REVOKED_AUTH_COOKIE_ACCEPTED_WHILE_REFRESH_BLOCKED=CONFIRMED' /tmp/result.log
+          grep -F 'REVOKED_COOKIE_BURST_200_COUNT=12' /tmp/result.log
+          grep -F 'AFTER_REFRESH_OLD_COOKIE_REJECTED=True' /tmp/result.log
