@@ -1,0 +1,25 @@
+name: blazor-refresh-cross-user-rebind
+
+on:
+  push:
+    branches:
+      - research/blazor-refresh-crosssite-lax-20260921
+
+jobs:
+  repro:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '11.0.x'
+          dotnet-quality: 'preview'
+      - name: Show SDK
+        run: dotnet --info
+      - name: Verify Chrome
+        run: |
+          command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser
+          (google-chrome --version || google-chrome-stable --version || chromium --version || chromium-browser --version)
+      - name: Run true cross-site SameSite Lax control
+        run: dotnet run --project blazor-refresh-lab/BlazorRefreshLab.csproj -c Release
