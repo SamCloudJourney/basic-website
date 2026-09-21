@@ -1,0 +1,24 @@
+name: Kestrel absolute-form request-target differential
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Environment
+        run: dotnet --info
+
+      - name: Run origin-vs-absolute differential probe
+        run: dotnet run --project research/kestrel-absolute-form-differential/KestrelAbsoluteFormProbe.csproj -c Release
