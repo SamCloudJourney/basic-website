@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 
 bool expectSafe = args.Contains("--expect-safe", StringComparer.Ordinal);
+bool revokeAll = args.Contains("--revoke-all", StringComparer.Ordinal);
 Console.WriteLine($"MODE={(expectSafe ? "EXPECT_SAFE" : "EXPECT_STALE_FIRST")}");
 Console.WriteLine($"FRAMEWORK={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
 Console.WriteLine($"OS={Environment.OSVersion}");
@@ -127,10 +128,20 @@ try
     Console.WriteLine($"KEY_FILES_BEFORE_REVOKE={Directory.GetFiles(keyDirectory, "*.xml").Length}");
 
     var stopwatch = Stopwatch.StartNew();
-    keyManager.RevokeKey(keyId, "MSRC built-in repository first-request validation");
+    if (revokeAll)
+    {
+        keyManager.RevokeAllKeys(
+            DateTimeOffset.UtcNow.AddMinutes(1),
+            "MSRC built-in repository emergency mass-revocation validation");
+    }
+    else
+    {
+        keyManager.RevokeKey(keyId, "MSRC built-in repository first-request validation");
+    }
     long revokeReturnedAtMs = stopwatch.ElapsedMilliseconds;
 
     string[] revocationFiles = Directory.GetFiles(keyDirectory, "revocation-*.xml");
+    Console.WriteLine($"REVOCATION_MODE={(revokeAll ? "ALL_KEYS" : "SINGLE_KEY")}");
     Console.WriteLine($"REVOKE_RETURNED=True ELAPSED_MS={revokeReturnedAtMs}");
     Console.WriteLine($"REVOCATION_FILE_COUNT={revocationFiles.Length}");
 
