@@ -1,0 +1,33 @@
+name: DataProtection cookie revocation cross-platform
+
+on:
+  push:
+    branches:
+      - research/dataprotection-cookie-revocation-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  cross-platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate cookie revocation behavior
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet run -c Release | tee result.log
+          grep -F 'REVOKED_AUTH_COOKIE_ACCEPTED_WHILE_REFRESH_BLOCKED=CONFIRMED' result.log
+          grep -F 'REVOKED_COOKIE_BURST_200_COUNT=12' result.log
+          grep -F 'AFTER_REFRESH_OLD_COOKIE_REJECTED=True' result.log
