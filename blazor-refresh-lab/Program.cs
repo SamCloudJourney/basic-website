@@ -75,7 +75,6 @@ app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapBlazorHub();
 app.MapHub<ControlHub>("/control", options => options.EnableAuthenticationRefresh = true);
 
 app.MapGet("/health", () => Results.Text("OK")).AllowAnonymous();
