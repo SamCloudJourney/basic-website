@@ -18,7 +18,7 @@ using Microsoft.Extensions.Options;
 
 const string BaseUrl = "http://127.0.0.1:5088";
 const string TargetBrowserUrl = "http://target.localtest.me:5088";
-const string AttackerBrowserUrl = "http://attacker.localtest.me:5089";
+const string AttackerBrowserUrl = "http://attacker.evil.test:5089";
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.UseUrls("http://127.0.0.1:5088;http://127.0.0.1:5089");
@@ -318,13 +318,14 @@ try
         throw new InvalidOperationException("Headless browser attack navigation failed.");
     }
 
-    var browserRefreshed = await observed.WaitForUserAsync("browser-victim", TimeSpan.FromSeconds(10));
+    await Task.Delay(750);
+    var browserVictimEvents = observed.Count("browser-victim");
 
     Console.WriteLine($"ATTACK_PAGE_SAW_VICTIM_COOKIE={browserObservation.AttackPageSawVictimCookie}");
     Console.WriteLine($"BROWSER_REFRESH_ORIGIN={browserObservation.RefreshOrigin}");
     Console.WriteLine($"BROWSER_REFRESH_SAW_VICTIM_COOKIE={browserObservation.RefreshSawVictimCookie}");
     Console.WriteLine($"BROWSER_REFRESH_STATUS={browserObservation.RefreshStatusCode}");
-    Console.WriteLine($"BROWSER_CIRCUIT_REFRESHED_USER={browserRefreshed}");
+    Console.WriteLine($"BROWSER_VICTIM_EVENTS={browserVictimEvents}");
     Console.WriteLine($"BROWSER_ATTACKER_CONNECTION_STATE_AFTER={browserAttackerConnection.State}");
 
     if (browserObservation.AttackPageSawVictimCookie)
@@ -332,9 +333,9 @@ try
         throw new InvalidOperationException("Target host-only victim cookie leaked to attacker origin.");
     }
 
-    if (!browserObservation.RefreshSawVictimCookie)
+    if (browserObservation.RefreshSawVictimCookie)
     {
-        throw new InvalidOperationException("SameSite=Lax victim cookie was not automatically sent to the target refresh POST.");
+        throw new InvalidOperationException("Explicit SameSite=Lax victim cookie unexpectedly crossed a true cross-site POST.");
     }
 
     if (!string.Equals(browserObservation.RefreshOrigin, AttackerBrowserUrl, StringComparison.Ordinal))
@@ -342,25 +343,20 @@ try
         throw new InvalidOperationException($"Unexpected refresh Origin: {browserObservation.RefreshOrigin}");
     }
 
-    if (browserObservation.RefreshStatusCode != StatusCodes.Status200OK)
+    if (browserVictimEvents != 0)
     {
-        throw new InvalidOperationException($"Browser refresh returned {browserObservation.RefreshStatusCode}.");
-    }
-
-    if (browserRefreshed != "browser-victim")
-    {
-        throw new InvalidOperationException("Browser-driven refresh did not rebind attacker circuit to victim.");
+        throw new InvalidOperationException("Cross-site request unexpectedly rebound the attacker circuit to the victim.");
     }
 
     if (browserAttackerConnection.State != HubConnectionState.Connected)
     {
-        throw new InvalidOperationException("Browser-proof attacker lost control of their live SignalR connection.");
+        throw new InvalidOperationException("Cross-site control unexpectedly disconnected the attacker connection.");
     }
 
-    Console.WriteLine("DEFAULT_LAX_SAME_SITE_CROSS_ORIGIN_POST_SENT_VICTIM_COOKIE=CONFIRMED");
-    Console.WriteLine("ATTACKER_ORIGIN_DID_NOT_RECEIVE_VICTIM_COOKIE=CONFIRMED");
-    Console.WriteLine("BROWSER_DRIVEN_ATTACKER_CIRCUIT_ADOPTED_VICTIM_PRINCIPAL=CONFIRMED");
-    Console.WriteLine("BROWSER_ATTACKER_CONNECTION_REMAINS_CONNECTED=CONFIRMED");
+    Console.WriteLine("TRUE_CROSS_SITE_POST_REACHED_REFRESH=CONFIRMED");
+    Console.WriteLine("DEFAULT_LAX_COOKIE_NOT_SENT_CROSS_SITE_POST=CONFIRMED");
+    Console.WriteLine("VICTIM_PRINCIPAL_NOT_PUBLISHED_CROSS_SITE=CONFIRMED");
+    Console.WriteLine("SAME_SITE_PRECONDITION_IS_BROWSER_COOKIE_BOUNDARY=CONFIRMED");
 }
 finally
 {
@@ -400,7 +396,7 @@ static async Task<(int ExitCode, string StdOut, string StdErr)> RunChromeAsync(
     process.StartInfo.ArgumentList.Add("--disable-gpu");
     process.StartInfo.ArgumentList.Add("--disable-dev-shm-usage");
     process.StartInfo.ArgumentList.Add("--no-proxy-server");
-    process.StartInfo.ArgumentList.Add("--host-resolver-rules=MAP target.localtest.me 127.0.0.1, MAP attacker.localtest.me 127.0.0.1");
+    process.StartInfo.ArgumentList.Add("--host-resolver-rules=MAP target.localtest.me 127.0.0.1, MAP attacker.evil.test 127.0.0.1");
     process.StartInfo.ArgumentList.Add("--user-data-dir=" + profileDir);
     process.StartInfo.ArgumentList.Add("--dump-dom");
     process.StartInfo.ArgumentList.Add(url);
