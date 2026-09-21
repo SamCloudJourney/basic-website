@@ -1,0 +1,39 @@
+name: DataProtection built-in filesystem causal control
+
+on:
+  push:
+    branches:
+      - research/dataprotection-cookie-first-request-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  causal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Default async path
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run -c Release | tee /tmp/default.log
+          grep -F 'FIRST_POST_REVOKE_STATUS=200' /tmp/default.log
+          grep -F 'FIRST_POST_REVOKE_COOKIE_ACCEPTED=CONFIRMED' /tmp/default.log
+
+      - name: Synchronous compatibility switch
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run -c Release -- --sync | tee /tmp/sync.log
+          grep -F 'MODE=SYNC_GUARD' /tmp/sync.log
+          grep -F 'FIRST_POST_REVOKE_STATUS=401' /tmp/sync.log
+          grep -F 'FIRST_POST_REVOKE_COOKIE_REJECTED=True' /tmp/sync.log
+          grep -F 'BUILTIN_REPOSITORY_SAFE_CONTROL=PASS' /tmp/sync.log
