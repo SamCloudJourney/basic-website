@@ -8,9 +8,11 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
 
-bool expectSafe = args.Contains("--expect-safe", StringComparer.Ordinal);
+bool syncGuard = args.Contains("--sync", StringComparer.Ordinal);
+bool expectSafe = args.Contains("--expect-safe", StringComparer.Ordinal) || syncGuard;
 bool revokeAll = args.Contains("--revoke-all", StringComparer.Ordinal);
-Console.WriteLine($"MODE={(expectSafe ? "EXPECT_SAFE" : "EXPECT_STALE_FIRST")}");
+AppContext.SetSwitch("Microsoft.AspNetCore.DataProtection.KeyManagement.DisableAsyncKeyRingUpdate", syncGuard);
+Console.WriteLine($"MODE={(syncGuard ? "SYNC_GUARD" : expectSafe ? "EXPECT_SAFE" : "EXPECT_STALE_FIRST")}");
 Console.WriteLine($"FRAMEWORK={System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription}");
 Console.WriteLine($"OS={Environment.OSVersion}");
 
