@@ -1,0 +1,156 @@
+name: Generic MSI LocalSystem control
+
+on:
+  push:
+    branches:
+      - research/msi-system-control-20260921
+  workflow_dispatch:
+
+jobs:
+  msi-system-control:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create benign execution probe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path msi-control -Force | Out-Null
+          @'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <OutputType>Exe</OutputType>
+              <TargetFramework>net10.0-windows</TargetFramework>
+              <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+              <SelfContained>true</SelfContained>
+              <PublishSingleFile>true</PublishSingleFile>
+              <ImplicitUsings>enable</ImplicitUsings>
+              <Nullable>enable</Nullable>
+            </PropertyGroup>
+          </Project>
+          '@ | Set-Content msi-control\ExecProbe.csproj
+
+          @'
+          using System.Security.Principal;
+
+          internal static class Program
+          {
+              private static int Main()
+              {
+                  using WindowsIdentity identity = WindowsIdentity.GetCurrent();
+                  bool isAdmin = new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);
+                  bool isSystem = identity.User?.IsWellKnown(WellKnownSidType.LocalSystemSid) == true;
+
+                  string proofPath = Path.Combine(AppContext.BaseDirectory, "execution-proof.txt");
+                  File.WriteAllLines(proofPath,
+                  [
+                      "EXEC_PROBE_RAN=YES",
+                      $"IDENTITY={identity.Name}",
+                      $"SID={identity.User?.Value}",
+                      $"IS_ADMIN={isAdmin}",
+                      $"IS_SYSTEM={isSystem}",
+                      $"PROCESS_ID={Environment.ProcessId}",
+                  ]);
+
+                  return isSystem ? 0 : 14;
+              }
+          }
+          '@ | Set-Content msi-control\Program.cs
+
+          dotnet publish msi-control\ExecProbe.csproj -c Release -o msi-control\publish
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build unsigned per-machine MSI
+        shell: pwsh
+        run: |
+          "AUTHORIZED SECURITY RESEARCH MARKER" | Set-Content msi-control\marker.txt
+          @'
+          <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+            <Package
+              Name="GenericMsiLocalSystemControl"
+              Manufacturer="Authorized Security Research"
+              Version="1.0.0"
+              Language="1033"
+              UpgradeCode="3D548B56-A931-4B8C-A702-C9070787BB1A"
+              Scope="perMachine">
+
+              <MediaTemplate EmbedCab="yes" />
+
+              <StandardDirectory Id="ProgramFilesFolder">
+                <Directory Id="ControlDir" Name="GenericMsiLocalSystemControl">
+                  <Component Id="MarkerComponent" Guid="6E59471A-B12A-4E80-B49A-1F9CE6405BE0">
+                    <File Id="MarkerFile" Source="marker.txt" KeyPath="yes" />
+                  </Component>
+                  <Component Id="ExecProbeComponent" Guid="5FBCDBA7-8B47-4A10-B3FA-B154A6AE7BC4">
+                    <File Id="ExecProbe" Source="publish\ExecProbe.exe" KeyPath="yes" />
+                  </Component>
+                </Directory>
+              </StandardDirectory>
+
+              <Feature Id="MainFeature" Title="Control" Level="1">
+                <ComponentRef Id="MarkerComponent" />
+                <ComponentRef Id="ExecProbeComponent" />
+              </Feature>
+
+              <CustomAction
+                Id="RunExecProbe"
+                FileRef="ExecProbe"
+                ExeCommand=""
+                Execute="deferred"
+                Impersonate="no"
+                Return="check" />
+
+              <InstallExecuteSequence>
+                <Custom Action="RunExecProbe" After="InstallFiles" Condition="NOT Installed" />
+              </InstallExecuteSequence>
+            </Package>
+          </Wix>
+          '@ | Set-Content msi-control\control.wxs
+
+          dotnet tool install wix --version 5.0.2 --tool-path msi-control\.wix
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          Push-Location msi-control
+          try {
+            & .\.wix\wix.exe build .\control.wxs -o .\control.msi
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          } finally {
+            Pop-Location
+          }
+
+          $sig = Get-AuthenticodeSignature -FilePath msi-control\control.msi
+          Write-Host "MSI_SIGNATURE_STATUS=$($sig.Status)"
+          if ($sig.Status -ne "NotSigned") { throw "Expected unsigned MSI" }
+
+      - name: Install and assert LocalSystem custom-action identity
+        shell: pwsh
+        run: |
+          $msi = (Resolve-Path msi-control\control.msi).Path
+          $p = Start-Process msiexec.exe -ArgumentList @("/i", ('"' + $msi + '"'), "/qn", "/norestart") -Wait -PassThru
+          Write-Host "MSIEXEC_INSTALL_EXIT=$($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { throw "MSI install failed" }
+
+          $proofCandidates = @(
+            "$env:ProgramFiles\GenericMsiLocalSystemControl\execution-proof.txt",
+            "${env:ProgramFiles(x86)}\GenericMsiLocalSystemControl\execution-proof.txt"
+          )
+          $proof = $proofCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $proof) { throw "execution-proof.txt not found" }
+
+          $lines = Get-Content $proof
+          $lines | ForEach-Object { Write-Host "SYSTEM_CONTROL_$_" }
+          $text = $lines -join [Environment]::NewLine
+
+          if ($text -notmatch 'EXEC_PROBE_RAN=YES') { throw "Probe did not execute" }
+          if ($text -notmatch 'SID=S-1-5-18') { throw "Probe SID was not LocalSystem" }
+          if ($text -notmatch 'IS_SYSTEM=True') { throw "Probe did not confirm SYSTEM" }
+
+          Write-Host "GENERIC_MSI_DEFERRED_NONIMPERSONATED_SYSTEM_EXECUTION=CONFIRMED"
+
+          $u = Start-Process msiexec.exe -ArgumentList @("/x", ('"' + $msi + '"'), "/qn", "/norestart") -Wait -PassThru
+          Write-Host "MSIEXEC_UNINSTALL_EXIT=$($u.ExitCode)"
