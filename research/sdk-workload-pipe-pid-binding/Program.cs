@@ -158,10 +158,19 @@ internal static class Program
         using var dispatch = new NamedPipeClientStream(".", dispatchPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         using var log = new NamedPipeClientStream(".", logPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var cts = new CancellationTokenSource();
         Task dispatchConnect = dispatch.ConnectAsync(cts.Token);
         Task logConnect = log.ConnectAsync(cts.Token);
-        await Task.WhenAll(dispatchConnect, logConnect);
+        Task connectAll = Task.WhenAll(dispatchConnect, logConnect);
+        if (await Task.WhenAny(connectAll, Task.Delay(TimeSpan.FromSeconds(10))) != connectAll)
+        {
+            cts.Cancel();
+            Console.WriteLine($"DISPATCH_PIPE_CONNECTED={dispatch.IsConnected}");
+            Console.WriteLine($"LOG_PIPE_CONNECTED={log.IsConnected}");
+            Console.WriteLine("PIPE_CONNECT_TIMEOUT=True");
+            return 3;
+        }
+        await connectAll;
 
         Console.WriteLine("DISPATCH_PIPE_CONNECTED_BY_NON_PARENT=True");
         Console.WriteLine("LOG_PIPE_CONNECTED_BY_NON_PARENT=True");
