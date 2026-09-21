@@ -48,8 +48,24 @@ internal static class Program
 
         if (args.Length > 0 && args[0] == "ots-helper")
         {
+            if (args.Length >= 2)
+            {
+                using var helperWriter = new StreamWriter(args[1], append: false) { AutoFlush = true };
+                using WindowsIdentity helperIdentity = WindowsIdentity.GetCurrent();
+                helperWriter.WriteLine($"OTS_HELPER_PID={Environment.ProcessId}");
+                helperWriter.WriteLine($"OTS_HELPER_ACCOUNT={helperIdentity.Name}");
+                helperWriter.WriteLine($"OTS_HELPER_SID={helperIdentity.User?.Value}");
+                helperWriter.WriteLine($"OTS_HELPER_INTEGRITY_SID={GetCurrentIntegritySid()}");
+            }
             await Task.Delay(TimeSpan.FromMinutes(2));
             return 0;
+        }
+
+        if (args.Length > 0 && args[0] == "ots-broker-parent-only")
+        {
+            return await RunBrokerWithExplicitParentAsync(
+                parentPid: int.Parse(args[1]),
+                serverPidFile: args[2]);
         }
 
         if (args.Length > 0 && args[0] == "ots-attacker")
@@ -368,6 +384,65 @@ internal static class Program
         }
     }
 
+
+    private static async Task<int> RunBrokerWithExplicitParentAsync(int parentPid, string serverPidFile)
+    {
+        string dotnet = Environment.ProcessPath ?? throw new InvalidOperationException("Environment.ProcessPath unavailable.");
+        string workingDirectory = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? Environment.CurrentDirectory;
+
+        using WindowsIdentity brokerLauncherIdentity = WindowsIdentity.GetCurrent();
+        Console.WriteLine($"OTS_BROKER_LAUNCHER_ACCOUNT={brokerLauncherIdentity.Name}");
+        Console.WriteLine($"OTS_BROKER_LAUNCHER_SID={brokerLauncherIdentity.User?.Value}");
+        Console.WriteLine($"OTS_BROKER_LAUNCHER_IS_ADMIN={new WindowsPrincipal(brokerLauncherIdentity).IsInRole(WindowsBuiltInRole.Administrator)}");
+        Console.WriteLine($"OTS_REQUESTED_PARENT_PID={parentPid}");
+
+        IntPtr parentHandle = OpenProcess(
+            OtsProcessCreateProcess | OtsProcessQueryLimitedInformation,
+            false,
+            checked((uint)parentPid));
+
+        if (parentHandle == IntPtr.Zero)
+        {
+            throw new System.ComponentModel.Win32Exception(
+                Marshal.GetLastWin32Error(),
+                "OpenProcess explicit parent failed");
+        }
+
+        PROCESS_INFORMATION serverPi = default;
+        try
+        {
+            serverPi = StartProcessWithExplicitParent(
+                parentHandle,
+                dotnet,
+                $"\"{dotnet}\" workload elevate --client-temp \"{Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar)}\"",
+                workingDirectory);
+
+            int serverPid = checked((int)serverPi.dwProcessId);
+            Console.WriteLine($"OTS_ELEVATED_SERVER_PID={serverPid}");
+            await File.WriteAllTextAsync(serverPidFile, serverPid.ToString());
+
+            using Process server = Process.GetProcessById(serverPid);
+            Task exited = server.WaitForExitAsync();
+            if (await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(35))) == exited)
+            {
+                Console.WriteLine($"OTS_ELEVATED_SERVER_EXIT={server.ExitCode}");
+                return server.ExitCode;
+            }
+
+            Console.WriteLine("OTS_BROKER_HOLD_COMPLETE=True");
+            return 0;
+        }
+        finally
+        {
+            if (serverPi.hProcess != IntPtr.Zero)
+            {
+                OtsTerminateProcess(serverPi.hProcess, 0);
+            }
+            if (serverPi.hThread != IntPtr.Zero) CloseHandle(serverPi.hThread);
+            if (serverPi.hProcess != IntPtr.Zero) CloseHandle(serverPi.hProcess);
+            CloseHandle(parentHandle);
+        }
+    }
 
     private static async Task<int> RunCrossSidServiceAsync(int sdkMajor)
     {
