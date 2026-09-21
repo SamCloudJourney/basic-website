@@ -1,0 +1,36 @@
+name: SDK workload elevated pipe PID-binding probe
+
+on:
+  push:
+    branches:
+      - research/dotnet-sdk-workload-pipe-pid-binding-20260921
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Environment
+        shell: pwsh
+        run: |
+          dotnet --info
+          whoami
+          whoami /groups
+
+      - name: Build probe
+        shell: pwsh
+        run: |
+          dotnet build research/sdk-workload-pipe-pid-binding/PipeHijackProbe.csproj -c Release
+
+      - name: Run real workload-elevate pipe probe
+        shell: pwsh
+        run: |
+          $dll = Resolve-Path "research/sdk-workload-pipe-pid-binding/bin/Release/net10.0/PipeHijackProbe.dll"
+          dotnet $dll
