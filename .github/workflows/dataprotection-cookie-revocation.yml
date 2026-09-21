@@ -1,0 +1,42 @@
+name: DataProtection cookie revocation validation
+
+on:
+  push:
+    branches:
+      - research/dataprotection-cookie-revocation-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Default async behavior
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet run -c Release | tee /tmp/cookie-default.log
+          grep -F 'REVOKED_AUTH_COOKIE_ACCEPTED_WHILE_REFRESH_BLOCKED=CONFIRMED' /tmp/cookie-default.log
+          grep -F 'REVOKED_COOKIE_BURST_200_COUNT=12' /tmp/cookie-default.log
+          grep -F 'AFTER_REFRESH_OLD_COOKIE_REJECTED=True' /tmp/cookie-default.log
+          grep -F 'COOKIE_REVOCATION_WINDOW_E2E=PASS' /tmp/cookie-default.log
+
+      - name: Synchronous causal control
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run -c Release -- --sync | tee /tmp/cookie-sync.log
+          grep -F 'SYNC_GUARD_COOKIE_REQUEST_BLOCKED_UNTIL_REFRESH=True' /tmp/cookie-sync.log
+          grep -F 'SYNC_GUARD_PROTECTED_EXECUTIONS_AFTER_REVOKE=0' /tmp/cookie-sync.log
+          grep -F 'SYNC_GUARD_REVOKED_COOKIE_REJECTED=True' /tmp/cookie-sync.log
+          grep -F 'COOKIE_REVOCATION_SYNC_CONTROL=PASS' /tmp/cookie-sync.log
