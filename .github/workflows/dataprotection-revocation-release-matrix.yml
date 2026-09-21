@@ -1,0 +1,68 @@
+name: DataProtection revocation release matrix
+
+on:
+  push:
+    branches:
+      - research/dataprotection-revocation-race-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  supported:
+    strategy:
+      fail-fast: false
+      matrix:
+        tfm: ['9.0','10.0']
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ matrix.tfm }}.x'
+      - name: Retarget
+        working-directory: research/dataprotection-revocation-race
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("dataprotection-revocation-race.csproj")
+          s=p.read_text().replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net${{ matrix.tfm }}</TargetFramework>")
+          p.write_text(s)
+          PY
+      - name: Validate release behavior
+        working-directory: research/dataprotection-revocation-race
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet run -c Release | tee /tmp/result.log
+          grep -F 'REVOCATION_BYPASS_WINDOW=CONFIRMED' /tmp/result.log
+          grep -F 'AFTER_REFRESH_UNPROTECT_REJECTED=True' /tmp/result.log
+
+  rc1:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100-rc.1.26425.128'
+      - name: Retarget
+        working-directory: research/dataprotection-revocation-race
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("dataprotection-revocation-race.csproj")
+          s=p.read_text().replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net11.0</TargetFramework>")
+          p.write_text(s)
+          PY
+      - name: Validate RC behavior
+        working-directory: research/dataprotection-revocation-race
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet run -c Release | tee /tmp/result.log
+          grep -F 'REVOCATION_BYPASS_WINDOW=CONFIRMED' /tmp/result.log
+          grep -F 'AFTER_REFRESH_UNPROTECT_REJECTED=True' /tmp/result.log
