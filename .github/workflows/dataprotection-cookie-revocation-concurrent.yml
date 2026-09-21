@@ -1,0 +1,57 @@
+name: DataProtection concurrent revocation probe
+
+on:
+  push:
+    branches:
+      - research/dataprotection-cookie-revocation-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  dotnet8-default:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Retarget app
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("dataprotection-cookie-revocation.csproj")
+          p.write_text(p.read_text().replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net8.0</TargetFramework>"))
+          PY
+      - name: Probe concurrent request during synchronous refresh
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run -c Release -- --expect-safe-default --probe-concurrent | tee result.log
+          grep -F 'CONCURRENT_REVOKED_COOKIE_ACCEPTED=CONFIRMED' result.log
+          grep -F 'CONCURRENT_POST_REVOKE_COOKIE_STATUS=200' result.log
+          grep -F 'DEFAULT_SAFE_POST_REFRESH_STATUS=401' result.log
+          grep -F 'COOKIE_REVOCATION_CONCURRENT_CONTROL=PASS' result.log
+
+  dotnet10-sync:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Probe compatibility path concurrency
+        working-directory: research/dataprotection-cookie-revocation
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run -c Release -- --sync --probe-concurrent | tee result.log
+          grep -F 'CONCURRENT_REVOKED_COOKIE_ACCEPTED=CONFIRMED' result.log
+          grep -F 'CONCURRENT_POST_REVOKE_COOKIE_STATUS=200' result.log
+          grep -F 'SYNC_GUARD_POST_REFRESH_STATUS=401' result.log
+          grep -F 'COOKIE_REVOCATION_CONCURRENT_CONTROL=PASS' result.log
