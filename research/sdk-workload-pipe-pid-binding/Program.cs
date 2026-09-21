@@ -158,22 +158,27 @@ internal static class Program
         using var dispatch = new NamedPipeClientStream(".", dispatchPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
         using var log = new NamedPipeClientStream(".", logPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
 
-        using var cts = new CancellationTokenSource();
-        Task dispatchConnect = dispatch.ConnectAsync(cts.Token);
-        Task logConnect = log.ConnectAsync(cts.Token);
-        Task connectAll = Task.WhenAll(dispatchConnect, logConnect);
-        if (await Task.WhenAny(connectAll, Task.Delay(TimeSpan.FromSeconds(10))) != connectAll)
+        try
         {
-            cts.Cancel();
-            Console.WriteLine($"DISPATCH_PIPE_CONNECTED={dispatch.IsConnected}");
-            Console.WriteLine($"LOG_PIPE_CONNECTED={log.IsConnected}");
-            Console.WriteLine("PIPE_CONNECT_TIMEOUT=True");
+            dispatch.Connect(5000);
+            Console.WriteLine("DISPATCH_PIPE_CONNECTED_BY_NON_PARENT=True");
+        }
+        catch (Exception ex) when (ex is TimeoutException or UnauthorizedAccessException or IOException)
+        {
+            Console.WriteLine($"DISPATCH_PIPE_CONNECT_FAILED={ex.GetType().Name}:{ex.Message}");
             return 3;
         }
-        await connectAll;
 
-        Console.WriteLine("DISPATCH_PIPE_CONNECTED_BY_NON_PARENT=True");
-        Console.WriteLine("LOG_PIPE_CONNECTED_BY_NON_PARENT=True");
+        try
+        {
+            log.Connect(5000);
+            Console.WriteLine("LOG_PIPE_CONNECTED_BY_NON_PARENT=True");
+        }
+        catch (Exception ex) when (ex is TimeoutException or UnauthorizedAccessException or IOException)
+        {
+            Console.WriteLine($"LOG_PIPE_CONNECT_FAILED={ex.GetType().Name}:{ex.Message}");
+            return 3;
+        }
 
         using var logDrainCts = new CancellationTokenSource();
         Task logDrain = DrainLogAsync(log, logDrainCts.Token);
