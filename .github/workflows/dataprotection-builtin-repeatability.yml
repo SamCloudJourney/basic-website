@@ -1,0 +1,49 @@
+name: DataProtection built-in repeatability stress
+
+on:
+  push:
+    branches:
+      - research/dataprotection-cookie-first-request-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  repeatability:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Ten independent default-async runs
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          set -euxo pipefail
+          passed=0
+          for i in $(seq 1 10); do
+            dotnet run -c Release --no-restore 2>&1 | tee "/tmp/default-$i.log"
+            grep -F 'FIRST_POST_REVOKE_STATUS=200' "/tmp/default-$i.log"
+            grep -F 'FIRST_POST_REVOKE_COOKIE_ACCEPTED=CONFIRMED' "/tmp/default-$i.log"
+            passed=$((passed+1))
+          done
+          echo "DEFAULT_ASYNC_REPEATABILITY_200_COUNT=$passed"
+          test "$passed" -eq 10
+
+      - name: Ten independent synchronous-switch runs
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          set -euxo pipefail
+          passed=0
+          for i in $(seq 1 10); do
+            dotnet run -c Release --no-restore -- --sync 2>&1 | tee "/tmp/sync-$i.log"
+            grep -F 'FIRST_POST_REVOKE_STATUS=401' "/tmp/sync-$i.log"
+            grep -F 'FIRST_POST_REVOKE_COOKIE_REJECTED=True' "/tmp/sync-$i.log"
+            passed=$((passed+1))
+          done
+          echo "SYNC_GUARD_REPEATABILITY_401_COUNT=$passed"
+          test "$passed" -eq 10
