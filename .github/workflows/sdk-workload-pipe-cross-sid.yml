@@ -88,7 +88,9 @@ jobs:
             Write-Host "WORKFLOW_HELPER_PID=$helperPid"
             Write-Host "WORKFLOW_SERVER_PID=$serverPid"
 
-            $attackerCommand = '"' + $dotnet + '" "' + $dll + '" ots-attacker ' + $serverPid + ' ' + $helperPid + ' 10 "' + $attackerEvidence + '"'
+            # Do not pass the broker PID to the attacker. It receives only the expected
+            # parent PID and target SDK major, then discovers the broker from local process state.
+            $attackerCommand = '"' + $dotnet + '" "' + $dll + '" ots-attacker-scan ' + $helperPid + ' 10 "' + $attackerEvidence + '"'
             & schtasks.exe /Create /TN $attackerTask /TR $attackerCommand /SC ONCE /ST 23:59 /RU 'NT AUTHORITY\LOCAL SERVICE' /F
             if ($LASTEXITCODE -ne 0) { throw "Unable to create LocalService attacker task" }
             & schtasks.exe /Run /TN $attackerTask
@@ -117,8 +119,10 @@ jobs:
             if ($brokerText -notmatch 'OTS_BROKER_LAUNCHER_IS_ADMIN=True') { throw "Broker launcher was not administrator" }
             if ($attackText -notmatch 'OTS_ATTACKER_SID=S-1-5-19') { throw "Attacker was not LocalService" }
             if ($attackText -notmatch 'ATTACKER_DIRECT_HKLM_WRITE_ALLOWED=False') { throw "Direct HKLM negative control failed" }
-            if ($attackText -notmatch 'DISPATCH_PIPE_CONNECTED_BY_NON_PARENT=True') { throw "Non-parent dispatcher connection failed" }
-            if ($attackText -notmatch 'LOG_PIPE_CONNECTED_BY_NON_PARENT=True') { throw "Non-parent logger connection failed" }
+            if ($attackText -notmatch 'SERVER_PID_HANDOFF=False') { throw "Attacker unexpectedly received broker PID" }
+            if ($attackText -notmatch 'DISPATCH_PIPE_DISCOVERED_AND_CONNECTED=True') { throw "Attacker did not discover dispatcher pipe" }
+            if ($attackText -notmatch 'LOG_PIPE_DISCOVERED_AND_CONNECTED=True') { throw "Attacker did not discover logger pipe" }
+            if ($attackText -notmatch 'BROKER_DISCOVERY_WITHOUT_PID_HANDOFF=CONFIRMED') { throw "PID-free broker discovery did not confirm" }
             if ($attackText -notmatch 'HKLM_MARKER_CREATED=True') { throw "Elevated HKLM mutation did not occur" }
             if ($attackText -notmatch 'HKLM_MARKER_CLEANED=True') { throw "Marker cleanup did not complete" }
             if ($attackText -notmatch 'ELEVATED_BROKER_PRIVILEGE_BYPASS=CONFIRMED') { throw "Cross-SID privilege proof did not confirm" }
