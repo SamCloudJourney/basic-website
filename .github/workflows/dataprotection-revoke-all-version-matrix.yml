@@ -1,0 +1,80 @@
+name: DataProtection RevokeAllKeys version matrix
+
+on:
+  push:
+    branches:
+      - research/dataprotection-cookie-first-request-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  supported:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tfm: '8.0'
+            mode: safe
+          - tfm: '9.0'
+            mode: stale
+          - tfm: '10.0'
+            mode: stale
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '${{ matrix.tfm }}.x'
+      - name: Retarget app
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("dataprotection-cookie-first-request.csproj")
+          p.write_text(p.read_text().replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net${{ matrix.tfm }}</TargetFramework>"))
+          PY
+      - name: Validate mass revocation
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [ "${{ matrix.mode }}" = "safe" ]; then
+            dotnet run -c Release -- --revoke-all --expect-safe | tee result.log
+            grep -F 'REVOCATION_MODE=ALL_KEYS' result.log
+            grep -F 'FIRST_POST_REVOKE_STATUS=401' result.log
+          else
+            dotnet run -c Release -- --revoke-all | tee result.log
+            grep -F 'REVOCATION_MODE=ALL_KEYS' result.log
+            grep -F 'FIRST_POST_REVOKE_STATUS=200' result.log
+            grep -F 'FIRST_POST_REVOKE_COOKIE_ACCEPTED=CONFIRMED' result.log
+          fi
+
+  rc1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100-rc.1.26425.128'
+      - name: Retarget app
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("dataprotection-cookie-first-request.csproj")
+          p.write_text(p.read_text().replace("<TargetFramework>net10.0</TargetFramework>", "<TargetFramework>net11.0</TargetFramework>"))
+          PY
+      - name: Validate RC mass revocation
+        working-directory: research/dataprotection-cookie-first-request
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run -c Release -- --revoke-all | tee result.log
+          grep -F 'REVOCATION_MODE=ALL_KEYS' result.log
+          grep -F 'FIRST_POST_REVOKE_STATUS=200' result.log
+          grep -F 'FIRST_POST_REVOKE_COOKIE_ACCEPTED=CONFIRMED' result.log
