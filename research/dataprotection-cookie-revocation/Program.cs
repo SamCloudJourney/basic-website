@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.DataProtection.Repositories;
 const string SyncSwitch = "Microsoft.AspNetCore.DataProtection.KeyManagement.DisableAsyncKeyRingUpdate";
 bool syncGuard = args.Contains("--sync", StringComparer.Ordinal);
 bool expectSafeDefault = args.Contains("--expect-safe-default", StringComparer.Ordinal);
+bool probeConcurrent = args.Contains("--probe-concurrent", StringComparer.Ordinal);
 bool expectBlocking = syncGuard || expectSafeDefault;
 AppContext.SetSwitch(SyncSwitch, syncGuard);
 
@@ -266,6 +267,43 @@ else
     string safePrefix = syncGuard ? "SYNC_GUARD" : "DEFAULT_SAFE";
     Console.WriteLine($"{safePrefix}_COOKIE_REQUEST_BLOCKED_UNTIL_REFRESH=True");
 
+    int concurrentProtectedExecutions = 0;
+    if (probeConcurrent)
+    {
+        Task<HttpResponseMessage> concurrentRequest = SendProtectedAsync();
+        Task concurrentWinner = await Task.WhenAny(
+            concurrentRequest,
+            Task.Delay(TimeSpan.FromSeconds(3)));
+
+        bool concurrentCompleted = ReferenceEquals(concurrentWinner, concurrentRequest);
+        Console.WriteLine($"CONCURRENT_COOKIE_REQUEST_COMPLETED_WHILE_REFRESH_BLOCKED={concurrentCompleted}");
+
+        if (!concurrentCompleted)
+        {
+            repository.ReleaseBlockedRead();
+            throw new Exception("Concurrent stale-ring probe did not complete while the refresh lock was held.");
+        }
+
+        using HttpResponseMessage concurrentResponse = await concurrentRequest;
+        string concurrentBody = await concurrentResponse.Content.ReadAsStringAsync();
+        Console.WriteLine($"CONCURRENT_POST_REVOKE_COOKIE_STATUS={(int)concurrentResponse.StatusCode}");
+        Console.WriteLine($"CONCURRENT_POST_REVOKE_COOKIE_BODY={concurrentBody}");
+
+        concurrentProtectedExecutions =
+            Volatile.Read(ref protectedExecutions) - baselineExecutions;
+
+        Console.WriteLine($"CONCURRENT_PROTECTED_EXECUTIONS_AFTER_REVOKE={concurrentProtectedExecutions}");
+
+        if (concurrentResponse.StatusCode != HttpStatusCode.OK ||
+            concurrentProtectedExecutions < 1)
+        {
+            repository.ReleaseBlockedRead();
+            throw new Exception("Concurrent request did not reproduce stale revoked-cookie authorization.");
+        }
+
+        Console.WriteLine("CONCURRENT_REVOKED_COOKIE_ACCEPTED=CONFIRMED");
+    }
+
     repository.ReleaseBlockedRead();
 
     using HttpResponseMessage response =
@@ -279,14 +317,22 @@ else
         Volatile.Read(ref protectedExecutions) - baselineExecutions;
     Console.WriteLine($"{safePrefix}_PROTECTED_EXECUTIONS_AFTER_REVOKE={executionsAfterRevoke}");
 
+    int expectedExecutions = probeConcurrent ? concurrentProtectedExecutions : 0;
     if (response.StatusCode != HttpStatusCode.Unauthorized ||
-        executionsAfterRevoke != 0)
+        executionsAfterRevoke != expectedExecutions)
     {
-        throw new Exception("Blocking control failed to reject revoked authentication cookie.");
+        throw new Exception("Blocking control did not reach the expected post-refresh state.");
     }
 
     Console.WriteLine($"{safePrefix}_REVOKED_COOKIE_REJECTED=True");
-    Console.WriteLine(syncGuard ? "COOKIE_REVOCATION_SYNC_CONTROL=PASS" : "COOKIE_REVOCATION_DEFAULT_SAFE_CONTROL=PASS");
+    if (probeConcurrent)
+    {
+        Console.WriteLine("COOKIE_REVOCATION_CONCURRENT_CONTROL=PASS");
+    }
+    else
+    {
+        Console.WriteLine(syncGuard ? "COOKIE_REVOCATION_SYNC_CONTROL=PASS" : "COOKIE_REVOCATION_DEFAULT_SAFE_CONTROL=PASS");
+    }
 }
 
 await app.StopAsync();
