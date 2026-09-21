@@ -1,0 +1,32 @@
+name: DataProtection revocation refresh-failure amplification
+
+on:
+  push:
+    branches:
+      - research/dataprotection-revocation-refresh-failure-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate transient repository failure amplification
+        working-directory: research/dataprotection-revocation-refresh-failure
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet run -c Release | tee result.log
+          grep -F 'REVOCATION_FILE_COUNT=1' result.log
+          grep -F 'FIRST_POST_REVOKE_STATUS=200' result.log
+          grep -F 'POST_REVOKE_REFRESH_FAILURE_OBSERVED=True' result.log
+          grep -F 'POST_FAILURE_REPLAY_200_COUNT=8' result.log
+          grep -F 'TRANSIENT_REFRESH_FAILURE_EXTENDS_REVOKED_COOKIE_ACCEPTANCE=CONFIRMED' result.log
+          grep -F 'REVOCATION_REFRESH_FAILURE_AMPLIFICATION=PASS' result.log
