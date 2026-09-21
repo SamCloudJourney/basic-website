@@ -464,7 +464,15 @@ internal static class Program
             try
             {
                 using Process child = Process.GetProcessById((int)pi.dwProcessId);
-                await child.WaitForExitAsync();
+                Task exited = child.WaitForExitAsync();
+                if (await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(25))) != exited)
+                {
+                    Console.WriteLine($"MEDIUM_ATTACKER_TIMEOUT_PID={child.Id}");
+                    try { child.Kill(entireProcessTree: true); } catch { }
+                    try { await child.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5)); } catch { }
+                    return 124;
+                }
+
                 return child.ExitCode;
             }
             finally
