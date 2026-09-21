@@ -1,0 +1,833 @@
+﻿2026-09-21T20:48:37.9266955Z Current runner version: '2.337.0'
+2026-09-21T20:48:37.9293111Z ##[group]Runner Image Provisioner
+2026-09-21T20:48:37.9294201Z Hosted Compute Agent
+2026-09-21T20:48:37.9294833Z Version: 20260828.587
+2026-09-21T20:48:37.9295548Z Commit: abac92662cab4cc7352de4f9f9d2e2419aad9c29
+2026-09-21T20:48:37.9296335Z Build Date: 2026-08-28T16:44:25Z
+2026-09-21T20:48:37.9297064Z Worker ID: {91bec27e-0781-4154-b323-abe8df98e519}
+2026-09-21T20:48:37.9297901Z Azure Region: westcentralus
+2026-09-21T20:48:37.9298620Z ##[endgroup]
+2026-09-21T20:48:37.9300066Z ##[group]Operating System
+2026-09-21T20:48:37.9300999Z Ubuntu
+2026-09-21T20:48:37.9301614Z 24.04.5
+2026-09-21T20:48:37.9302272Z LTS
+2026-09-21T20:48:37.9302827Z ##[endgroup]
+2026-09-21T20:48:37.9303401Z ##[group]Runner Image
+2026-09-21T20:48:37.9304104Z Image: ubuntu-24.04
+2026-09-21T20:48:37.9304710Z Version: 20260907.300.1
+2026-09-21T20:48:37.9306147Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260907.300/images/ubuntu/Ubuntu2404-Readme.md
+2026-09-21T20:48:37.9307752Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260907.300
+2026-09-21T20:48:37.9308851Z ##[endgroup]
+2026-09-21T20:48:37.9310095Z ##[group]GITHUB_TOKEN Permissions
+2026-09-21T20:48:37.9312851Z Contents: read
+2026-09-21T20:48:37.9313503Z Metadata: read
+2026-09-21T20:48:37.9314517Z Packages: read
+2026-09-21T20:48:37.9315147Z ##[endgroup]
+2026-09-21T20:48:37.9317362Z Secret source: Actions
+2026-09-21T20:48:37.9318464Z Cache mode: write
+2026-09-21T20:48:37.9319211Z Prepare workflow directory
+2026-09-21T20:48:37.9659699Z Prepare all required actions
+2026-09-21T20:48:37.9708669Z Getting action download info
+2026-09-21T20:48:38.2866789Z Download action repository 'actions/checkout@v5' (SHA:fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09)
+2026-09-21T20:48:38.4165939Z Download action repository 'actions/setup-dotnet@v5' (SHA:26b0ec14cb23fa6904739307f278c14f94c95bf1)
+2026-09-21T20:48:39.1554159Z Complete job name: repro
+2026-09-21T20:48:39.2335875Z ##[group]Run actions/checkout@v5
+2026-09-21T20:48:39.2337011Z with:
+2026-09-21T20:48:39.2337536Z   repository: SamCloudJourney/basic-website
+2026-09-21T20:48:39.2342042Z   token: ***
+2026-09-21T20:48:39.2342541Z   ssh-strict: true
+2026-09-21T20:48:39.2343038Z   ssh-user: git
+2026-09-21T20:48:39.2343534Z   persist-credentials: true
+2026-09-21T20:48:39.2344071Z   clean: true
+2026-09-21T20:48:39.2344563Z   sparse-checkout-cone-mode: true
+2026-09-21T20:48:39.2345147Z   fetch-depth: 1
+2026-09-21T20:48:39.2345623Z   fetch-tags: false
+2026-09-21T20:48:39.2346112Z   show-progress: true
+2026-09-21T20:48:39.2346600Z   lfs: false
+2026-09-21T20:48:39.2347069Z   submodules: false
+2026-09-21T20:48:39.2347577Z   set-safe-directory: true
+2026-09-21T20:48:39.2348129Z   allow-unsafe-pr-checkout: false
+2026-09-21T20:48:39.2348987Z ##[endgroup]
+2026-09-21T20:48:39.3432461Z Syncing repository: SamCloudJourney/basic-website
+2026-09-21T20:48:39.3435563Z ##[group]Getting Git version info
+2026-09-21T20:48:39.3437028Z Working directory is '/home/runner/work/basic-website/basic-website'
+2026-09-21T20:48:39.3439043Z [command]/usr/bin/git version
+2026-09-21T20:48:39.3471428Z git version 2.55.0
+2026-09-21T20:48:39.3502681Z ##[endgroup]
+2026-09-21T20:48:39.3509939Z Temporarily overriding HOME='/home/runner/work/_temp/33284d9e-9c5e-4658-82e9-edd277e2ea37' before making global git config changes
+2026-09-21T20:48:39.3512492Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-21T20:48:39.3525796Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/basic-website/basic-website
+2026-09-21T20:48:39.3567382Z Deleting the contents of '/home/runner/work/basic-website/basic-website'
+2026-09-21T20:48:39.3572515Z ##[group]Initializing the repository
+2026-09-21T20:48:39.3577984Z [command]/usr/bin/git init /home/runner/work/basic-website/basic-website
+2026-09-21T20:48:39.3680908Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-09-21T20:48:39.3682885Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-09-21T20:48:39.3684892Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-09-21T20:48:39.3686207Z hint: call:
+2026-09-21T20:48:39.3687297Z hint:
+2026-09-21T20:48:39.3688218Z hint: 	git config --global init.defaultBranch <name>
+2026-09-21T20:48:39.3689309Z hint:
+2026-09-21T20:48:39.3690309Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-09-21T20:48:39.3692263Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-09-21T20:48:39.3693609Z hint:
+2026-09-21T20:48:39.3694357Z hint: 	git branch -m <name>
+2026-09-21T20:48:39.3695204Z hint:
+2026-09-21T20:48:39.3696310Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-09-21T20:48:39.3704289Z Initialized empty Git repository in /home/runner/work/basic-website/basic-website/.git/
+2026-09-21T20:48:39.3714654Z [command]/usr/bin/git remote add origin https://github.com/SamCloudJourney/basic-website
+2026-09-21T20:48:39.3762851Z ##[endgroup]
+2026-09-21T20:48:39.3764187Z ##[group]Disabling automatic garbage collection
+2026-09-21T20:48:39.3765885Z [command]/usr/bin/git config --local gc.auto 0
+2026-09-21T20:48:39.3803543Z ##[endgroup]
+2026-09-21T20:48:39.3804960Z ##[group]Setting up auth
+2026-09-21T20:48:39.3810273Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-21T20:48:39.3848486Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-21T20:48:39.4206297Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-21T20:48:39.4250971Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-21T20:48:39.4522040Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-21T20:48:39.4562547Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-21T20:48:39.4816512Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-09-21T20:48:39.4860919Z ##[endgroup]
+2026-09-21T20:48:39.4862099Z ##[group]Fetching the repository
+2026-09-21T20:48:39.4872442Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ef0c153d5b9423cce68773487a73fbc9a123b237:refs/remotes/origin/research/blazor-refresh-crosssite-lax-20260921
+2026-09-21T20:48:39.8637680Z From https://github.com/SamCloudJourney/basic-website
+2026-09-21T20:48:39.8639838Z  * [new ref]         ef0c153d5b9423cce68773487a73fbc9a123b237 -> origin/research/blazor-refresh-crosssite-lax-20260921
+2026-09-21T20:48:39.8644368Z ##[endgroup]
+2026-09-21T20:48:39.8645897Z ##[group]Determining the checkout info
+2026-09-21T20:48:39.8647322Z ##[endgroup]
+2026-09-21T20:48:39.8654764Z [command]/usr/bin/git sparse-checkout disable
+2026-09-21T20:48:39.8707086Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-09-21T20:48:39.8742106Z ##[group]Checking out the ref
+2026-09-21T20:48:39.8755408Z [command]/usr/bin/git checkout --progress --force -B research/blazor-refresh-crosssite-lax-20260921 refs/remotes/origin/research/blazor-refresh-crosssite-lax-20260921
+2026-09-21T20:48:39.8814491Z Switched to a new branch 'research/blazor-refresh-crosssite-lax-20260921'
+2026-09-21T20:48:39.8820161Z branch 'research/blazor-refresh-crosssite-lax-20260921' set up to track 'origin/research/blazor-refresh-crosssite-lax-20260921'.
+2026-09-21T20:48:39.8825061Z ##[endgroup]
+2026-09-21T20:48:39.8867425Z [command]/usr/bin/git log -1 --format=%H
+2026-09-21T20:48:39.8895946Z ef0c153d5b9423cce68773487a73fbc9a123b237
+2026-09-21T20:48:39.9260568Z ##[group]Run actions/setup-dotnet@v5
+2026-09-21T20:48:39.9261992Z with:
+2026-09-21T20:48:39.9262873Z   dotnet-version: 11.0.x
+2026-09-21T20:48:39.9263937Z   dotnet-quality: preview
+2026-09-21T20:48:39.9264975Z   cache: false
+2026-09-21T20:48:39.9265877Z ##[endgroup]
+2026-09-21T20:48:40.0788004Z [command]/home/runner/work/_actions/actions/setup-dotnet/v5/externals/install-dotnet.sh --skip-non-versioned-files --runtime dotnet --channel LTS
+2026-09-21T20:48:40.5160829Z dotnet-install: Attempting to download using aka.ms link https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-x64.tar.gz
+2026-09-21T20:48:41.0117781Z dotnet-install: Remote file https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-x64.tar.gz size is 36638192 bytes.
+2026-09-21T20:48:41.0124315Z dotnet-install: Extracting archive from https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.12/dotnet-runtime-10.0.12-linux-x64.tar.gz
+2026-09-21T20:48:41.7564876Z dotnet-install: Downloaded file size is 36638192 bytes.
+2026-09-21T20:48:41.7571139Z dotnet-install: The remote and local file sizes are equal.
+2026-09-21T20:48:41.7871126Z dotnet-install: Installed version is 10.0.12
+2026-09-21T20:48:41.7935055Z dotnet-install: Adding to current process PATH: `/usr/share/dotnet`. Note: This change will be visible only when sourcing script.
+2026-09-21T20:48:41.7961578Z dotnet-install: Note that the script does not resolve dependencies during installation.
+2026-09-21T20:48:41.7965105Z dotnet-install: To check the list of dependencies, go to https://learn.microsoft.com/dotnet/core/install, select your operating system and check the "Dependencies" section.
+2026-09-21T20:48:41.7967199Z dotnet-install: Installation finished successfully.
+2026-09-21T20:48:41.7969015Z [command]/home/runner/work/_actions/actions/setup-dotnet/v5/externals/install-dotnet.sh --skip-non-versioned-files --channel 11.0 --quality preview
+2026-09-21T20:48:42.2695618Z dotnet-install: Attempting to download using aka.ms link https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-linux-x64.tar.gz
+2026-09-21T20:48:43.8183436Z dotnet-install: Remote file https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-linux-x64.tar.gz size is 207623687 bytes.
+2026-09-21T20:48:43.8185655Z dotnet-install: Extracting archive from https://builds.dotnet.microsoft.com/dotnet/Sdk/11.0.100-rc.1.26425.128/dotnet-sdk-11.0.100-rc.1.26425.128-linux-x64.tar.gz
+2026-09-21T20:48:48.6842140Z dotnet-install: Downloaded file size is 207623687 bytes.
+2026-09-21T20:48:48.6843201Z dotnet-install: The remote and local file sizes are equal.
+2026-09-21T20:48:49.0971495Z dotnet-install: Installed version is 11.0.100-rc.1.26425.128
+2026-09-21T20:48:49.1042232Z dotnet-install: Adding to current process PATH: `/usr/share/dotnet`. Note: This change will be visible only when sourcing script.
+2026-09-21T20:48:49.1043633Z dotnet-install: Note that the script does not resolve dependencies during installation.
+2026-09-21T20:48:49.1045108Z dotnet-install: To check the list of dependencies, go to https://learn.microsoft.com/dotnet/core/install, select your operating system and check the "Dependencies" section.
+2026-09-21T20:48:49.1046401Z dotnet-install: Installation finished successfully.
+2026-09-21T20:48:49.1302130Z ##[group]Run dotnet --info
+2026-09-21T20:48:49.1302497Z [36;1mdotnet --info[0m
+2026-09-21T20:48:49.1350604Z shell: /usr/bin/bash -e {0}
+2026-09-21T20:48:49.1350926Z env:
+2026-09-21T20:48:49.1351162Z   DOTNET_ROOT: /usr/share/dotnet
+2026-09-21T20:48:49.1351446Z ##[endgroup]
+2026-09-21T20:48:49.2176033Z .NET SDK:
+2026-09-21T20:48:49.2176831Z  Version:           11.0.100-rc.1.26425.128
+2026-09-21T20:48:49.2177388Z  Commit:            3551975be0
+2026-09-21T20:48:49.3233303Z  Workload version:  11.0.100-manifests.a6e318ce
+2026-09-21T20:48:49.3234289Z  MSBuild version:   18.11.0-1.26425.128+3551975be
+2026-09-21T20:48:49.3234895Z 
+2026-09-21T20:48:49.3235110Z Runtime Environment:
+2026-09-21T20:48:49.3236030Z  OS Name:     ubuntu
+2026-09-21T20:48:49.3236395Z  OS Version:  24.04
+2026-09-21T20:48:49.3236768Z  OS Platform: Linux
+2026-09-21T20:48:49.3237135Z  RID:         linux-x64
+2026-09-21T20:48:49.3237643Z  Base Path:   /usr/share/dotnet/sdk/11.0.100-rc.1.26425.128
+2026-09-21T20:48:49.3238104Z 
+2026-09-21T20:48:49.3238284Z .NET workloads installed:
+2026-09-21T20:48:49.3250981Z There are no installed workloads to display.
+2026-09-21T20:48:49.3251697Z Configured to use workload sets when installing new manifests.
+2026-09-21T20:48:49.3252559Z No workload sets are installed. Run "dotnet workload restore" to install a workload set.
+2026-09-21T20:48:49.8133991Z 
+2026-09-21T20:48:49.8134443Z Host:
+2026-09-21T20:48:49.8134850Z   Version:      11.0.0-rc.1.26425.128
+2026-09-21T20:48:49.8135226Z   Architecture: x64
+2026-09-21T20:48:49.8135509Z   Commit:       3551975be0
+2026-09-21T20:48:49.8135675Z 
+2026-09-21T20:48:49.8135778Z .NET SDKs installed:
+2026-09-21T20:48:49.8136039Z   8.0.130 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8136350Z   8.0.206 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8136618Z   8.0.319 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8136877Z   8.0.424 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8137155Z   9.0.120 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8137431Z   9.0.205 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8137696Z   9.0.317 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8137968Z   10.0.111 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8138249Z   10.0.204 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8138518Z   10.0.303 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8138784Z   10.0.400 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8139087Z   11.0.100-rc.1.26425.128 [/usr/share/dotnet/sdk]
+2026-09-21T20:48:49.8139310Z 
+2026-09-21T20:48:49.8139427Z .NET runtimes installed:
+2026-09-21T20:48:49.8139875Z   Microsoft.AspNetCore.App 8.0.6 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:48:49.8140808Z   Microsoft.AspNetCore.App 8.0.22 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:48:49.8141789Z   Microsoft.AspNetCore.App 8.0.30 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:48:49.8142765Z   Microsoft.AspNetCore.App 9.0.6 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:48:49.8143741Z   Microsoft.AspNetCore.App 9.0.19 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:48:49.8144725Z   Microsoft.AspNetCore.App 10.0.8 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:48:49.8145638Z   Microsoft.AspNetCore.App 10.0.11 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:48:49.8146301Z   Microsoft.AspNetCore.App 11.0.0-rc.1.26425.128 [/usr/share/dotnet/shared/Microsoft.AspNetCore.App]
+2026-09-21T20:48:49.8146937Z   Microsoft.NETCore.App 8.0.6 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8147495Z   Microsoft.NETCore.App 8.0.22 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8148022Z   Microsoft.NETCore.App 8.0.30 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8148542Z   Microsoft.NETCore.App 9.0.6 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8149067Z   Microsoft.NETCore.App 9.0.19 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8149997Z   Microsoft.NETCore.App 10.0.8 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8151412Z   Microsoft.NETCore.App 10.0.11 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8152331Z   Microsoft.NETCore.App 10.0.12 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8153317Z   Microsoft.NETCore.App 11.0.0-rc.1.26425.128 [/usr/share/dotnet/shared/Microsoft.NETCore.App]
+2026-09-21T20:48:49.8153894Z 
+2026-09-21T20:48:49.8154114Z Other architectures found:
+2026-09-21T20:48:49.8154477Z   None
+2026-09-21T20:48:49.8154646Z 
+2026-09-21T20:48:49.8154813Z Environment variables:
+2026-09-21T20:48:49.8155257Z   DOTNET_MULTILEVEL_LOOKUP                 [0]
+2026-09-21T20:48:49.8155885Z   DOTNET_NOLOGO                            [1]
+2026-09-21T20:48:49.8156821Z   DOTNET_ROOT                              [/usr/share/dotnet]
+2026-09-21T20:48:49.8157418Z   DOTNET_SKIP_FIRST_TIME_EXPERIENCE        [1]
+2026-09-21T20:48:49.8157730Z 
+2026-09-21T20:48:49.8157910Z global.json file:
+2026-09-21T20:48:49.8158129Z   Not found
+2026-09-21T20:48:49.8158270Z 
+2026-09-21T20:48:49.8158355Z Learn more:
+2026-09-21T20:48:49.8158590Z   https://aka.ms/dotnet/info
+2026-09-21T20:48:49.8158761Z 
+2026-09-21T20:48:49.8158847Z Download .NET:
+2026-09-21T20:48:49.8159094Z   https://aka.ms/dotnet/download
+2026-09-21T20:48:49.8200333Z ##[group]Run command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser
+2026-09-21T20:48:49.8201565Z [36;1mcommand -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser[0m
+2026-09-21T20:48:49.8202367Z [36;1m(google-chrome --version || google-chrome-stable --version || chromium --version || chromium-browser --version)[0m
+2026-09-21T20:48:49.8243895Z shell: /usr/bin/bash -e {0}
+2026-09-21T20:48:49.8244153Z env:
+2026-09-21T20:48:49.8244367Z   DOTNET_ROOT: /usr/share/dotnet
+2026-09-21T20:48:49.8244627Z ##[endgroup]
+2026-09-21T20:48:49.8308360Z /usr/bin/google-chrome
+2026-09-21T20:48:53.4824495Z Google Chrome 152.0.7977.82 
+2026-09-21T20:48:53.4962708Z ##[group]Run dotnet run --project blazor-refresh-lab/BlazorRefreshLab.csproj -c Release
+2026-09-21T20:48:53.4963334Z [36;1mdotnet run --project blazor-refresh-lab/BlazorRefreshLab.csproj -c Release[0m
+2026-09-21T20:48:53.5002373Z shell: /usr/bin/bash -e {0}
+2026-09-21T20:48:53.5002628Z env:
+2026-09-21T20:48:53.5002840Z   DOTNET_ROOT: /usr/share/dotnet
+2026-09-21T20:48:53.5003095Z ##[endgroup]
+2026-09-21T20:48:59.8652572Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubProtocolResolver[1]
+2026-09-21T20:48:59.8653946Z       Registered SignalR Protocol: json, implemented by Microsoft.AspNetCore.SignalR.Protocol.JsonHubProtocol.
+2026-09-21T20:48:59.8656109Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubProtocolResolver[1]
+2026-09-21T20:48:59.8657019Z       Registered SignalR Protocol: blazorpack, implemented by Microsoft.AspNetCore.Components.Server.BlazorPack.BlazorPackHubProtocol.
+2026-09-21T20:48:59.9672744Z info: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[62]
+2026-09-21T20:48:59.9674225Z       User profile is available. Using '/home/runner/.aspnet/DataProtection-Keys' as key repository; keys will not be encrypted at rest.
+2026-09-21T20:48:59.9741428Z dbug: Microsoft.Extensions.Hosting.Internal.Host[1]
+2026-09-21T20:48:59.9742310Z       Hosting starting
+2026-09-21T20:48:59.9866585Z dbug: Microsoft.AspNetCore.DataProtection.KeyManagement.DefaultKeyResolver[53]
+2026-09-21T20:48:59.9868179Z       Repository contains no viable default key. Caller should generate a key with immediate activation.
+2026-09-21T20:48:59.9874606Z dbug: Microsoft.AspNetCore.DataProtection.KeyManagement.KeyRingProvider[57]
+2026-09-21T20:48:59.9875896Z       Policy resolution states that a new key should be added to the key ring.
+2026-09-21T20:48:59.9902896Z info: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[58]
+2026-09-21T20:48:59.9904853Z       Creating key {fd38b0c0-2267-4a12-8690-6c4fe1877357} with creation date 2026-09-21 20:48:59Z, activation date 2026-09-21 20:48:59Z, and expiration date 2026-12-20 20:48:59Z.
+2026-09-21T20:49:00.0024011Z dbug: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[32]
+2026-09-21T20:49:00.0027401Z       Descriptor deserializer type for key {fd38b0c0-2267-4a12-8690-6c4fe1877357} is 'Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel.AuthenticatedEncryptorDescriptorDeserializer, Microsoft.AspNetCore.DataProtection, Version=11.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60'.
+2026-09-21T20:49:00.0058133Z dbug: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[34]
+2026-09-21T20:49:00.0059511Z       No key escrow sink found. Not writing key {fd38b0c0-2267-4a12-8690-6c4fe1877357} to escrow.
+2026-09-21T20:49:00.0065665Z warn: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[35]
+2026-09-21T20:49:00.0067277Z       No XML encryptor configured. Key {fd38b0c0-2267-4a12-8690-6c4fe1877357} may be persisted to storage in unencrypted form.
+2026-09-21T20:49:00.0112281Z info: Microsoft.AspNetCore.DataProtection.Repositories.FileSystemXmlRepository[39]
+2026-09-21T20:49:00.0113894Z       Writing data to file '/home/runner/.aspnet/DataProtection-Keys/key-fd38b0c0-2267-4a12-8690-6c4fe1877357.xml'.
+2026-09-21T20:49:00.0115427Z dbug: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[23]
+2026-09-21T20:49:00.0116716Z       Key cache expiration token triggered by 'CreateNewKey' operation.
+2026-09-21T20:49:00.0118008Z dbug: Microsoft.AspNetCore.DataProtection.Repositories.FileSystemXmlRepository[37]
+2026-09-21T20:49:00.0119587Z       Reading data from file '/home/runner/.aspnet/DataProtection-Keys/key-fd38b0c0-2267-4a12-8690-6c4fe1877357.xml'.
+2026-09-21T20:49:00.0142525Z dbug: Microsoft.AspNetCore.DataProtection.KeyManagement.XmlKeyManager[18]
+2026-09-21T20:49:00.0143601Z       Found key {fd38b0c0-2267-4a12-8690-6c4fe1877357}.
+2026-09-21T20:49:00.0191307Z dbug: Microsoft.AspNetCore.DataProtection.KeyManagement.DefaultKeyResolver[13]
+2026-09-21T20:49:00.0193667Z       Considering key {fd38b0c0-2267-4a12-8690-6c4fe1877357} with expiration date 2026-12-20 20:48:59Z as default key.
+2026-09-21T20:49:00.0216903Z dbug: Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ManagedAuthenticatedEncryptorFactory[11]
+2026-09-21T20:49:00.0218599Z       Using managed symmetric algorithm 'System.Security.Cryptography.Aes'.
+2026-09-21T20:49:00.0220145Z dbug: Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ManagedAuthenticatedEncryptorFactory[10]
+2026-09-21T20:49:00.0221981Z       Using managed keyed hash algorithm 'System.Security.Cryptography.HMACSHA256'.
+2026-09-21T20:49:00.0244361Z dbug: Microsoft.AspNetCore.DataProtection.KeyManagement.KeyRingProvider[2]
+2026-09-21T20:49:00.0245601Z       Using key {fd38b0c0-2267-4a12-8690-6c4fe1877357} as the default key.
+2026-09-21T20:49:00.0272263Z dbug: Microsoft.AspNetCore.DataProtection.Internal.DataProtectionHostedService[65]
+2026-09-21T20:49:00.0273806Z       Key ring with default key {fd38b0c0-2267-4a12-8690-6c4fe1877357} was loaded during application startup.
+2026-09-21T20:49:00.0486523Z dbug: Microsoft.AspNetCore.HostFiltering.HostFilteringMiddleware[7]
+2026-09-21T20:49:00.0488595Z       Middleware configuration started with options: {AllowedHosts = *, AllowEmptyHosts = True, IncludeFailureMessage = True}
+2026-09-21T20:49:00.0490975Z dbug: Microsoft.AspNetCore.HostFiltering.HostFilteringMiddleware[0]
+2026-09-21T20:49:00.0492203Z       Wildcard detected, all requests with hosts will be allowed.
+2026-09-21T20:49:00.0623964Z info: Microsoft.Hosting.Lifetime[14]
+2026-09-21T20:49:00.0625470Z       Now listening on: http://127.0.0.1:5088
+2026-09-21T20:49:00.0626583Z info: Microsoft.Hosting.Lifetime[14]
+2026-09-21T20:49:00.0627374Z       Now listening on: http://127.0.0.1:5089
+2026-09-21T20:49:00.0628288Z dbug: Microsoft.AspNetCore.Hosting.Diagnostics[13]
+2026-09-21T20:49:00.0629258Z       Loaded hosting startup assembly BlazorRefreshLab
+2026-09-21T20:49:00.0630095Z info: Microsoft.Hosting.Lifetime[0]
+2026-09-21T20:49:00.0631232Z       Application started. Press Ctrl+C to shut down.
+2026-09-21T20:49:00.0652078Z info: Microsoft.Hosting.Lifetime[0]
+2026-09-21T20:49:00.0652857Z       Hosting environment: Production
+2026-09-21T20:49:00.0653635Z info: Microsoft.Hosting.Lifetime[0]
+2026-09-21T20:49:00.0654775Z       Content root path: /home/runner/work/basic-website/basic-website/blazor-refresh-lab
+2026-09-21T20:49:00.0655969Z dbug: Microsoft.Extensions.Hosting.Internal.Host[2]
+2026-09-21T20:49:00.0656713Z       Hosting started
+2026-09-21T20:49:00.1389022Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:00.1393645Z       Connection id "0HNOO471MJ1V8" accepted.
+2026-09-21T20:49:00.1394696Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:00.1396048Z       Connection id "0HNOO471MJ1V8" started.
+2026-09-21T20:49:00.1631822Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:00.1652311Z       Request starting HTTP/1.1 POST http://127.0.0.1:5088/_blazor/negotiate?negotiateVersion=1 - - 0
+2026-09-21T20:49:00.1897808Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:00.1904894Z       1 candidate(s) found for the request path '/_blazor/negotiate'
+2026-09-21T20:49:00.1911277Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:00.1917700Z       Request matched endpoint '/_blazor/negotiate'
+2026-09-21T20:49:00.1992345Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:00.1993690Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:00.2021997Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:00.2023112Z       Executing endpoint '/_blazor/negotiate'
+2026-09-21T20:49:00.2051123Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionManager[1]
+2026-09-21T20:49:00.2052521Z       New connection ZaGLlCaAWgmsjGgb86Itwg created.
+2026-09-21T20:49:00.2072884Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionDispatcher[10]
+2026-09-21T20:49:00.2074725Z       Sending negotiation response.
+2026-09-21T20:49:00.2116696Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:00.2121373Z       Executed endpoint '/_blazor/negotiate'
+2026-09-21T20:49:00.2122214Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:00.2123068Z       Connection id "0HNOO471MJ1V8" completed keep alive response.
+2026-09-21T20:49:00.2123884Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:00.2125440Z       Request finished HTTP/1.1 POST http://127.0.0.1:5088/_blazor/negotiate?negotiateVersion=1 - 200 316 application/json 49.5507ms
+2026-09-21T20:49:00.2316107Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:00.2342218Z       Connection id "0HNOO471MJ1V9" accepted.
+2026-09-21T20:49:00.2343250Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:00.2344012Z       Connection id "0HNOO471MJ1V9" started.
+2026-09-21T20:49:00.2344731Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:00.2345884Z       Request starting HTTP/1.1 GET http://127.0.0.1:5088/_blazor?id=60emalB-sQ-EJlpThF49TQ - - -
+2026-09-21T20:49:00.2347213Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:00.2348040Z       1 candidate(s) found for the request path '/_blazor'
+2026-09-21T20:49:00.2348902Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:00.2349689Z       Request matched endpoint '/_blazor'
+2026-09-21T20:49:00.2350311Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:00.2351214Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:00.2351947Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:00.2352670Z       Executing endpoint '/_blazor'
+2026-09-21T20:49:00.2353907Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionDispatcher[4]
+2026-09-21T20:49:00.2370207Z       Establishing new connection.
+2026-09-21T20:49:00.2389405Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionHandler[5]
+2026-09-21T20:49:00.2402627Z       OnConnectedAsync started.
+2026-09-21T20:49:00.2429005Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[1]
+2026-09-21T20:49:00.2430210Z       Socket opened using Sub-Protocol: '(null)'.
+2026-09-21T20:49:00.2727170Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubProtocolResolver[2]
+2026-09-21T20:49:00.2728506Z       Found protocol implementation for requested protocol: blazorpack.
+2026-09-21T20:49:00.2741547Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionContext[1]
+2026-09-21T20:49:00.2742393Z       Completed connection handshake. Using HubProtocol 'blazorpack'.
+2026-09-21T20:49:00.2966638Z ATTACKER_CONNECTION_TOKEN_CAPTURED=True
+2026-09-21T20:49:00.2991971Z ATTACKER_CONNECTION_STATE_BEFORE=Connected
+2026-09-21T20:49:00.3332176Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher[1]
+2026-09-21T20:49:00.3333806Z       Received hub invocation: InvocationMessage { InvocationId: "1", Target: "StartCircuit", Arguments: [ http://127.0.0.1:5088/, http://127.0.0.1:5088/, [],  ], StreamIds: [  ] }.
+2026-09-21T20:49:00.4119826Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.RemoteJSRuntime[1]
+2026-09-21T20:49:00.4121992Z       Begin invoke JS interop '2': 'Blazor._internal.attachWebRendererInterop'
+2026-09-21T20:49:00.4180952Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitFactory[1]
+2026-09-21T20:49:00.4192555Z       Created circuit y7oc-hkPm2Xg838at3ZFFi-13jEYJrV94G3AwUZAHN4 for connection ZaGLlCaAWgmsjGgb86Itwg
+2026-09-21T20:49:00.4228977Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[100]
+2026-09-21T20:49:00.4230191Z       Circuit initialization started.
+2026-09-21T20:49:00.4252526Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[101]
+2026-09-21T20:49:00.4253639Z       Circuit initialization succeeded.
+2026-09-21T20:49:00.4322377Z dbug: Microsoft.AspNetCore.Components.Server.ComponentHub[7]
+2026-09-21T20:49:00.4324698Z       Created circuit 'y7oc-hkPm2Xg838at3ZFFi-13jEYJrV94G3AwUZAHN4' with secret '(redacted)' for 'ZaGLlCaAWgmsjGgb86Itwg'
+2026-09-21T20:49:00.4351456Z EMPTY_COMPONENT_CIRCUIT_STARTED=True
+2026-09-21T20:49:00.4358481Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher[1]
+2026-09-21T20:49:00.4360773Z       Received hub invocation: InvocationMessage { InvocationId: "2", Target: "UpdateRootComponents", Arguments: [ { "batchId": 1, "operations": [] },  ], StreamIds: [  ] }.
+2026-09-21T20:49:00.4537938Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[111]
+2026-09-21T20:49:00.4539653Z       Update root components started.
+2026-09-21T20:49:00.4600652Z CIRCUIT_HANDLER_CONSTRUCTED=True
+2026-09-21T20:49:00.4636497Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[106]
+2026-09-21T20:49:00.4638116Z       Opening circuit with id 'y7oc-hkPm2Xg838at3ZFFi-13jEYJrV94G3AwUZAHN4'.
+2026-09-21T20:49:00.4649946Z CIRCUIT_HANDLER_OPENED=True
+2026-09-21T20:49:00.4698955Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[107]
+2026-09-21T20:49:00.4701140Z       Circuit id 'y7oc-hkPm2Xg838at3ZFFi-13jEYJrV94G3AwUZAHN4' connected using connection 'ZaGLlCaAWgmsjGgb86Itwg'.
+2026-09-21T20:49:00.4752291Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[112]
+2026-09-21T20:49:00.4753705Z       Update root components succeeded.
+2026-09-21T20:49:00.4819491Z EMPTY_ROOT_COMPONENT_UPDATE_COMPLETED=True
+2026-09-21T20:49:00.4835417Z INITIAL_CIRCUIT_USER=anonymous
+2026-09-21T20:49:00.4851753Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:00.4852771Z       Connection id "0HNOO471MJ1VA" accepted.
+2026-09-21T20:49:00.4853683Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:00.4854534Z       Connection id "0HNOO471MJ1VA" started.
+2026-09-21T20:49:00.4861701Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:00.4871880Z       Request starting HTTP/1.1 POST http://127.0.0.1:5088/_blazor/refresh?id=60emalB-sQ-EJlpThF49TQ - - 0
+2026-09-21T20:49:00.4872997Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:00.4873954Z       1 candidate(s) found for the request path '/_blazor/refresh'
+2026-09-21T20:49:00.4874934Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:00.4875806Z       Request matched endpoint '/_blazor/refresh'
+2026-09-21T20:49:00.4891680Z dbug: LabCookieAuthenticationHandler[8]
+2026-09-21T20:49:00.4897192Z       AuthenticationScheme: Lab was successfully authenticated.
+2026-09-21T20:49:00.4898151Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:00.4899054Z       Executing endpoint '/_blazor/refresh'
+2026-09-21T20:49:00.4899908Z warn: Microsoft.AspNetCore.SignalR.HubConnectionHandler[7]
+2026-09-21T20:49:00.4902868Z       The refreshed principal maps to a different user identifier (current: '(null)', refreshed: 'victim'). The configured refresh policy accepted the principal, but SignalR retained the current identifier because user routing cannot be rekeyed.
+2026-09-21T20:49:00.4905990Z AUTH_STATE_CHANGED_EVENT=True
+2026-09-21T20:49:00.4912536Z AUTH_STATE_CHANGED_USER=victim
+2026-09-21T20:49:00.4919649Z VICTIM_COOKIE_REFRESH_STATUS=200
+2026-09-21T20:49:00.4920280Z VICTIM_COOKIE_REFRESH_BODY={}
+2026-09-21T20:49:00.4941562Z ATTACKER_CONNECTION_STATE_AFTER=Connected
+2026-09-21T20:49:00.4957686Z CIRCUIT_REFRESHED_USER=victim
+2026-09-21T20:49:00.4958677Z OBSERVED_EVENTS=anonymous,victim
+2026-09-21T20:49:00.4968726Z ATTACKER_OWNED_BLAZOR_CIRCUIT_ADOPTED_VICTIM_PRINCIPAL=CONFIRMED
+2026-09-21T20:49:00.4969871Z ATTACKER_CONNECTION_REMAINS_CONNECTED_AFTER_REBIND=CONFIRMED
+2026-09-21T20:49:00.4971012Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:00.4971905Z       Executed endpoint '/_blazor/refresh'
+2026-09-21T20:49:00.4972758Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:00.4973615Z       Connection id "0HNOO471MJ1VA" completed keep alive response.
+2026-09-21T20:49:00.4974422Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:00.4987213Z       Request finished HTTP/1.1 POST http://127.0.0.1:5088/_blazor/refresh?id=60emalB-sQ-EJlpThF49TQ - 200 2 application/json 9.8866ms
+2026-09-21T20:49:00.4988581Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:00.4989342Z       Connection id "0HNOO471MJ1VB" accepted.
+2026-09-21T20:49:00.4990116Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:00.4991154Z       Connection id "0HNOO471MJ1VB" started.
+2026-09-21T20:49:00.4991892Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:00.4993064Z       Request starting HTTP/1.1 POST http://127.0.0.1:5088/control/negotiate?negotiateVersion=1 - - 0
+2026-09-21T20:49:00.4994216Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:00.4995297Z       1 candidate(s) found for the request path '/control/negotiate'
+2026-09-21T20:49:00.4996382Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:00.4997267Z       Request matched endpoint '/control/negotiate'
+2026-09-21T20:49:00.4997984Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:00.4998726Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:00.5001082Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:00.5001982Z       Executing endpoint '/control/negotiate'
+2026-09-21T20:49:00.5002994Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionManager[1]
+2026-09-21T20:49:00.5004130Z       New connection 9Nvyl9LP2oRiCEV2_n-L3A created.
+2026-09-21T20:49:00.5005226Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionDispatcher[10]
+2026-09-21T20:49:00.5006282Z       Sending negotiation response.
+2026-09-21T20:49:00.5007085Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:00.5007874Z       Executed endpoint '/control/negotiate'
+2026-09-21T20:49:00.5008632Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:00.5009628Z       Connection id "0HNOO471MJ1VB" completed keep alive response.
+2026-09-21T20:49:00.5010641Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:00.5011830Z       Request finished HTTP/1.1 POST http://127.0.0.1:5088/control/negotiate?negotiateVersion=1 - 200 316 application/json 0.3966ms
+2026-09-21T20:49:00.5013172Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:00.5014070Z       Connection id "0HNOO471MJ1VC" accepted.
+2026-09-21T20:49:00.5015155Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:00.5016001Z       Connection id "0HNOO471MJ1VC" started.
+2026-09-21T20:49:00.5016768Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:00.5017808Z       Request starting HTTP/1.1 GET http://127.0.0.1:5088/control?id=XnOL7w2gEOtxuKU-kvWybg - - -
+2026-09-21T20:49:00.5019365Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:00.5020293Z       1 candidate(s) found for the request path '/control'
+2026-09-21T20:49:00.5021502Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:00.5022380Z       Request matched endpoint '/control'
+2026-09-21T20:49:00.5023091Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:00.5023868Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:00.5024787Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:00.5025528Z       Executing endpoint '/control'
+2026-09-21T20:49:00.5026456Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionDispatcher[4]
+2026-09-21T20:49:00.5027445Z       Establishing new connection.
+2026-09-21T20:49:00.5028255Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionHandler[5]
+2026-09-21T20:49:00.5029044Z       OnConnectedAsync started.
+2026-09-21T20:49:00.5030105Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[1]
+2026-09-21T20:49:00.5031392Z       Socket opened using Sub-Protocol: '(null)'.
+2026-09-21T20:49:00.5032694Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubProtocolResolver[2]
+2026-09-21T20:49:00.5033934Z       Found protocol implementation for requested protocol: json.
+2026-09-21T20:49:00.5034945Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionContext[1]
+2026-09-21T20:49:00.5035901Z       Completed connection handshake. Using HubProtocol 'json'.
+2026-09-21T20:49:00.5037630Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:00.5038795Z       Request starting HTTP/1.1 POST http://127.0.0.1:5088/control/refresh?id=XnOL7w2gEOtxuKU-kvWybg - - 0
+2026-09-21T20:49:00.5039974Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:00.5041131Z       1 candidate(s) found for the request path '/control/refresh'
+2026-09-21T20:49:00.5042180Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:00.5043197Z       Request matched endpoint '/control/refresh'
+2026-09-21T20:49:00.5043882Z dbug: LabCookieAuthenticationHandler[8]
+2026-09-21T20:49:00.5044662Z       AuthenticationScheme: Lab was successfully authenticated.
+2026-09-21T20:49:00.5045577Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:00.5046384Z       Executing endpoint '/control/refresh'
+2026-09-21T20:49:00.5047215Z warn: Microsoft.AspNetCore.SignalR.HubConnectionHandler[9]
+2026-09-21T20:49:00.5049042Z       Authentication refresh was rejected because it produced a different user identifier (old: '(null)', new: 'victim'). Changing a connection's user identifier during refresh is not supported.
+2026-09-21T20:49:00.5054839Z warn: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionDispatcher[20]
+2026-09-21T20:49:00.5056463Z       Rejecting the request because the name of the user changed from '(null)' to 'victim' for an existing connection.
+2026-09-21T20:49:00.5057861Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:00.5058698Z       Executed endpoint '/control/refresh'
+2026-09-21T20:49:00.5059492Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:00.5060392Z       Connection id "0HNOO471MJ1VA" completed keep alive response.
+2026-09-21T20:49:00.5061783Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:00.5063151Z       Request finished HTTP/1.1 POST http://127.0.0.1:5088/control/refresh?id=XnOL7w2gEOtxuKU-kvWybg - 403 24 application/json 3.5184ms
+2026-09-21T20:49:00.5064375Z NORMAL_SIGNALR_CROSS_USER_REFRESH_STATUS=403
+2026-09-21T20:49:00.5065226Z NORMAL_SIGNALR_CROSS_USER_REFRESH_BODY={"error":"user_changed"}
+2026-09-21T20:49:00.5066063Z NORMAL_SIGNALR_CONNECTION_STATE_AFTER=Connected
+2026-09-21T20:49:00.5066765Z NORMAL_SIGNALR_SAME_ATTACK_REJECTED_403=CONFIRMED
+2026-09-21T20:49:00.5067514Z BLAZOR_IDENTITY_OVERRIDE_IS_CAUSAL_DIFFERENCE=CONFIRMED
+2026-09-21T20:49:00.5072247Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:00.5073449Z       Connection id "0HNOO471MJ1VD" accepted.
+2026-09-21T20:49:00.5076465Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:00.5077317Z       Connection id "0HNOO471MJ1VD" started.
+2026-09-21T20:49:00.5078200Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:00.5079276Z       Request starting HTTP/1.1 POST http://127.0.0.1:5088/_blazor/negotiate?negotiateVersion=1 - - 0
+2026-09-21T20:49:00.5080597Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:00.5081572Z       1 candidate(s) found for the request path '/_blazor/negotiate'
+2026-09-21T20:49:00.5084506Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:00.5085511Z       Request matched endpoint '/_blazor/negotiate'
+2026-09-21T20:49:00.5086243Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:00.5090609Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:00.5092174Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:00.5093034Z       Executing endpoint '/_blazor/negotiate'
+2026-09-21T20:49:00.5095478Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionManager[1]
+2026-09-21T20:49:00.5096834Z       New connection 2e9pvyqJ9kl6QQBRPCtM-A created.
+2026-09-21T20:49:00.5097865Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionDispatcher[10]
+2026-09-21T20:49:00.5098877Z       Sending negotiation response.
+2026-09-21T20:49:00.5099665Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:00.5100694Z       Executed endpoint '/_blazor/negotiate'
+2026-09-21T20:49:00.5101553Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:00.5102516Z       Connection id "0HNOO471MJ1VD" completed keep alive response.
+2026-09-21T20:49:00.5103406Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:00.5104770Z       Request finished HTTP/1.1 POST http://127.0.0.1:5088/_blazor/negotiate?negotiateVersion=1 - 200 316 application/json 0.2099ms
+2026-09-21T20:49:00.5106283Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:00.5107145Z       Connection id "0HNOO471MJ1VE" accepted.
+2026-09-21T20:49:00.5107877Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:00.5108700Z       Connection id "0HNOO471MJ1VE" started.
+2026-09-21T20:49:00.5109482Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:00.5110769Z       Request starting HTTP/1.1 GET http://127.0.0.1:5088/_blazor?id=57HjWPCcaQpJw8snNOStQw - - -
+2026-09-21T20:49:00.5112000Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:00.5112981Z       1 candidate(s) found for the request path '/_blazor'
+2026-09-21T20:49:00.5113873Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:00.5114671Z       Request matched endpoint '/_blazor'
+2026-09-21T20:49:00.5115417Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:00.5116226Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:00.5117140Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:00.5117994Z       Executing endpoint '/_blazor'
+2026-09-21T20:49:00.5118992Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionDispatcher[4]
+2026-09-21T20:49:00.5120082Z       Establishing new connection.
+2026-09-21T20:49:00.5122135Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionHandler[5]
+2026-09-21T20:49:00.5123045Z       OnConnectedAsync started.
+2026-09-21T20:49:00.5124038Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[1]
+2026-09-21T20:49:00.5125160Z       Socket opened using Sub-Protocol: '(null)'.
+2026-09-21T20:49:00.5126114Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubProtocolResolver[2]
+2026-09-21T20:49:00.5127240Z       Found protocol implementation for requested protocol: blazorpack.
+2026-09-21T20:49:00.5128229Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionContext[1]
+2026-09-21T20:49:00.5129732Z       Completed connection handshake. Using HubProtocol 'blazorpack'.
+2026-09-21T20:49:00.5131132Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher[1]
+2026-09-21T20:49:00.5132957Z       Received hub invocation: InvocationMessage { InvocationId: "1", Target: "StartCircuit", Arguments: [ http://127.0.0.1:5088/, http://127.0.0.1:5088/, [],  ], StreamIds: [  ] }.
+2026-09-21T20:49:00.5291234Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.RemoteJSRuntime[1]
+2026-09-21T20:49:00.5292824Z       Begin invoke JS interop '2': 'Blazor._internal.attachWebRendererInterop'
+2026-09-21T20:49:00.5294129Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitFactory[1]
+2026-09-21T20:49:00.5295524Z       Created circuit ymX6LV1S6lnkVxrT1RRWSBV7IA3Fn_6Pku955K8hcJM for connection 2e9pvyqJ9kl6QQBRPCtM-A
+2026-09-21T20:49:00.5296950Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[100]
+2026-09-21T20:49:00.5311637Z       Circuit initialization started.
+2026-09-21T20:49:00.5312728Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[101]
+2026-09-21T20:49:00.5313734Z       Circuit initialization succeeded.
+2026-09-21T20:49:00.5314587Z dbug: Microsoft.AspNetCore.Components.Server.ComponentHub[7]
+2026-09-21T20:49:00.5316745Z       Created circuit 'ymX6LV1S6lnkVxrT1RRWSBV7IA3Fn_6Pku955K8hcJM' with secret '(redacted)' for '2e9pvyqJ9kl6QQBRPCtM-A'
+2026-09-21T20:49:00.5318055Z CIRCUIT_HANDLER_CONSTRUCTED=True
+2026-09-21T20:49:00.5318692Z CIRCUIT_HANDLER_OPENED=True
+2026-09-21T20:49:00.5319581Z dbug: Microsoft.AspNetCore.SignalR.Internal.DefaultHubDispatcher[1]
+2026-09-21T20:49:00.5321572Z       Received hub invocation: InvocationMessage { InvocationId: "2", Target: "UpdateRootComponents", Arguments: [ { "batchId": 2, "operations": [] },  ], StreamIds: [  ] }.
+2026-09-21T20:49:00.5323283Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[111]
+2026-09-21T20:49:00.5324230Z       Update root components started.
+2026-09-21T20:49:00.5325166Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[106]
+2026-09-21T20:49:00.5326307Z       Opening circuit with id 'ymX6LV1S6lnkVxrT1RRWSBV7IA3Fn_6Pku955K8hcJM'.
+2026-09-21T20:49:00.5327412Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[107]
+2026-09-21T20:49:00.5328895Z       Circuit id 'ymX6LV1S6lnkVxrT1RRWSBV7IA3Fn_6Pku955K8hcJM' connected using connection '2e9pvyqJ9kl6QQBRPCtM-A'.
+2026-09-21T20:49:00.5330283Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[112]
+2026-09-21T20:49:00.5331660Z       Update root components succeeded.
+2026-09-21T20:49:00.5332476Z BROWSER_ATTACKER_CIRCUIT_STARTED_ANONYMOUS=CONFIRMED
+2026-09-21T20:49:12.0859885Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:12.0860789Z       Connection id "0HNOO471MJ1VF" accepted.
+2026-09-21T20:49:12.0861390Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:12.0861999Z       Connection id "0HNOO471MJ1VF" started.
+2026-09-21T20:49:12.1038748Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:12.1039901Z       Request starting HTTP/1.1 GET http://target.localtest.me:5088/browser-login - - -
+2026-09-21T20:49:12.1041576Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:12.1042663Z       1 candidate(s) found for the request path '/browser-login'
+2026-09-21T20:49:12.1063030Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:12.1063764Z       Request matched endpoint 'HTTP: GET /browser-login'
+2026-09-21T20:49:12.1064316Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:12.1074177Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:12.1077057Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:12.1077736Z       Executing endpoint 'HTTP: GET /browser-login'
+2026-09-21T20:49:12.1078330Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:12.1078901Z       Connection id "0HNOO471MJ1VG" accepted.
+2026-09-21T20:49:12.1079780Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:12.1080335Z       Connection id "0HNOO471MJ1VG" started.
+2026-09-21T20:49:12.1085190Z info: Microsoft.AspNetCore.Http.Result.ContentResult[2]
+2026-09-21T20:49:12.1085927Z       Write content with HTTP Response ContentType of text/html
+2026-09-21T20:49:12.1092667Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:12.1093393Z       Executed endpoint 'HTTP: GET /browser-login'
+2026-09-21T20:49:12.1094220Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:12.1094970Z       Connection id "0HNOO471MJ1VF" completed keep alive response.
+2026-09-21T20:49:12.1095444Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:12.1096058Z       Request finished HTTP/1.1 GET http://target.localtest.me:5088/browser-login - 200 89 text/html 5.5594ms
+2026-09-21T20:49:12.3004418Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:12.3005274Z       Request starting HTTP/1.1 GET http://target.localtest.me:5088/favicon.ico - - -
+2026-09-21T20:49:12.3028498Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1000]
+2026-09-21T20:49:12.3029155Z       No candidates found for the request path '/favicon.ico'
+2026-09-21T20:49:12.3029925Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[2]
+2026-09-21T20:49:12.3030367Z       Request did not match any endpoints
+2026-09-21T20:49:12.3030918Z dbug: LabCookieAuthenticationHandler[8]
+2026-09-21T20:49:12.3031308Z       AuthenticationScheme: Lab was successfully authenticated.
+2026-09-21T20:49:12.3031748Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:12.3032192Z       Connection id "0HNOO471MJ1VF" completed keep alive response.
+2026-09-21T20:49:12.3050985Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:12.3051908Z       Request finished HTTP/1.1 GET http://target.localtest.me:5088/favicon.ico - 404 0 - 1.4155ms
+2026-09-21T20:49:12.3052488Z info: Microsoft.AspNetCore.Hosting.Diagnostics[16]
+2026-09-21T20:49:12.3053425Z       Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://target.localtest.me:5088/favicon.ico, Response status code: 404
+2026-09-21T20:49:12.6223489Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:12.6225489Z       Connection id "0HNOO471MJ1VG" received FIN.
+2026-09-21T20:49:12.6228238Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:12.6231779Z       Connection id "0HNOO471MJ1VF" received FIN.
+2026-09-21T20:49:12.6232435Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:12.6233007Z       Connection id "0HNOO471MJ1VG" disconnecting.
+2026-09-21T20:49:12.6233564Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:12.6234247Z       Connection id "0HNOO471MJ1VF" disconnecting.
+2026-09-21T20:49:12.6234798Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:12.6235613Z       Connection id "0HNOO471MJ1VF" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:12.6236376Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:12.6237202Z       Connection id "0HNOO471MJ1VG" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:12.6238005Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:12.6238536Z       Connection id "0HNOO471MJ1VF" stopped.
+2026-09-21T20:49:12.6239045Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:12.6239546Z       Connection id "0HNOO471MJ1VG" stopped.
+2026-09-21T20:49:12.6665935Z BROWSER_LOGIN_EXIT_CODE=0
+2026-09-21T20:49:13.0152399Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:13.0183395Z       Connection id "0HNOO471MJ1VH" accepted.
+2026-09-21T20:49:13.0195698Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:13.0196891Z       Connection id "0HNOO471MJ1VH" started.
+2026-09-21T20:49:13.0207443Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:13.0232933Z       Request starting HTTP/1.1 GET http://attacker.evil.test:5089/attack?token=57HjWPCcaQpJw8snNOStQw - - -
+2026-09-21T20:49:13.0234203Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:13.0235052Z       1 candidate(s) found for the request path '/attack'
+2026-09-21T20:49:13.0236006Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:13.0236856Z       Request matched endpoint 'HTTP: GET /attack'
+2026-09-21T20:49:13.0237519Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:13.0238235Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:13.0239014Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:13.0239748Z       Executing endpoint 'HTTP: GET /attack'
+2026-09-21T20:49:13.0240582Z info: Microsoft.AspNetCore.Http.Result.ContentResult[2]
+2026-09-21T20:49:13.0241419Z       Write content with HTTP Response ContentType of text/html
+2026-09-21T20:49:13.0244105Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:13.0244813Z       Executed endpoint 'HTTP: GET /attack'
+2026-09-21T20:49:13.0245831Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:13.0246771Z       Connection id "0HNOO471MJ1VH" completed keep alive response.
+2026-09-21T20:49:13.0247586Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:13.0252631Z       Request finished HTTP/1.1 GET http://attacker.evil.test:5089/attack?token=57HjWPCcaQpJw8snNOStQw - 200 277 text/html 1.5207ms
+2026-09-21T20:49:13.0253855Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:13.0254557Z       Connection id "0HNOO471MJ1VI" accepted.
+2026-09-21T20:49:13.0255329Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:13.0256132Z       Connection id "0HNOO471MJ1VH" received FIN.
+2026-09-21T20:49:13.0256887Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:13.0257668Z       Connection id "0HNOO471MJ1VH" disconnecting.
+2026-09-21T20:49:13.0258409Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:13.0259095Z       Connection id "0HNOO471MJ1VH" stopped.
+2026-09-21T20:49:13.0259824Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:13.0261320Z       Connection id "0HNOO471MJ1VI" started.
+2026-09-21T20:49:13.0262150Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:13.0263319Z       Connection id "0HNOO471MJ1VH" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:13.0438768Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:13.0439284Z       Connection id "0HNOO471MJ1VJ" accepted.
+2026-09-21T20:49:13.0439726Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:13.0440133Z       Connection id "0HNOO471MJ1VJ" started.
+2026-09-21T20:49:13.0662843Z AUTH_STATE_CHANGED_EVENT=True
+2026-09-21T20:49:13.0664214Z AUTH_STATE_CHANGED_USER=anonymous
+2026-09-21T20:49:13.0664998Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:13.0666521Z       Request starting HTTP/1.1 POST http://target.localtest.me:5088/_blazor/refresh?id=57HjWPCcaQpJw8snNOStQw - application/x-www-form-urlencoded 0
+2026-09-21T20:49:13.0667991Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1001]
+2026-09-21T20:49:13.0668945Z       1 candidate(s) found for the request path '/_blazor/refresh'
+2026-09-21T20:49:13.0669867Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[1]
+2026-09-21T20:49:13.0670897Z       Request matched endpoint '/_blazor/refresh'
+2026-09-21T20:49:13.0671622Z dbug: LabCookieAuthenticationHandler[9]
+2026-09-21T20:49:13.0672414Z       AuthenticationScheme: Lab was not authenticated.
+2026-09-21T20:49:13.0673284Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[0]
+2026-09-21T20:49:13.0674082Z       Executing endpoint '/_blazor/refresh'
+2026-09-21T20:49:13.0675187Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[39]
+2026-09-21T20:49:13.0675967Z       Connection id "0HNOO471MJ1VK" accepted.
+2026-09-21T20:49:13.0676726Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[1]
+2026-09-21T20:49:13.0679622Z       Connection id "0HNOO471MJ1VK" started.
+2026-09-21T20:49:13.0680607Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:13.0681409Z       Executed endpoint '/_blazor/refresh'
+2026-09-21T20:49:13.0682182Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:13.0683103Z       Connection id "0HNOO471MJ1VJ" completed keep alive response.
+2026-09-21T20:49:13.0684082Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:13.0685541Z       Request finished HTTP/1.1 POST http://target.localtest.me:5088/_blazor/refresh?id=57HjWPCcaQpJw8snNOStQw - 200 2 application/json 2.8339ms
+2026-09-21T20:49:13.1680908Z info: Microsoft.AspNetCore.Hosting.Diagnostics[1]
+2026-09-21T20:49:13.1781258Z       Request starting HTTP/1.1 GET http://target.localtest.me:5088/favicon.ico - - -
+2026-09-21T20:49:13.1821643Z dbug: Microsoft.AspNetCore.Routing.Matching.DfaMatcher[1000]
+2026-09-21T20:49:13.1881073Z       No candidates found for the request path '/favicon.ico'
+2026-09-21T20:49:13.1942347Z dbug: Microsoft.AspNetCore.Routing.EndpointRoutingMiddleware[2]
+2026-09-21T20:49:13.1943093Z       Request did not match any endpoints
+2026-09-21T20:49:13.1943653Z dbug: LabCookieAuthenticationHandler[8]
+2026-09-21T20:49:13.1944287Z       AuthenticationScheme: Lab was successfully authenticated.
+2026-09-21T20:49:13.1944764Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[9]
+2026-09-21T20:49:13.1945227Z       Connection id "0HNOO471MJ1VJ" completed keep alive response.
+2026-09-21T20:49:13.1945648Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:13.1946315Z       Request finished HTTP/1.1 GET http://target.localtest.me:5088/favicon.ico - 404 0 - 1.2024ms
+2026-09-21T20:49:13.1946850Z info: Microsoft.AspNetCore.Hosting.Diagnostics[16]
+2026-09-21T20:49:13.1947754Z       Request reached the end of the middleware pipeline without being handled by application code. Request path: GET http://target.localtest.me:5088/favicon.ico, Response status code: 404
+2026-09-21T20:49:13.2280072Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:13.2291932Z       Connection id "0HNOO471MJ1VK" received FIN.
+2026-09-21T20:49:13.2301591Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:13.2302141Z       Connection id "0HNOO471MJ1VK" disconnecting.
+2026-09-21T20:49:13.2302690Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:13.2303104Z       Connection id "0HNOO471MJ1VK" stopped.
+2026-09-21T20:49:13.2303542Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:13.2304266Z       Connection id "0HNOO471MJ1VK" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:13.2304930Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:13.2305448Z       Connection id "0HNOO471MJ1VJ" received FIN.
+2026-09-21T20:49:13.2305890Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:13.2306311Z       Connection id "0HNOO471MJ1VJ" disconnecting.
+2026-09-21T20:49:13.2306724Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:13.2307168Z       Connection id "0HNOO471MJ1VJ" stopped.
+2026-09-21T20:49:13.2307573Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:13.2308235Z       Connection id "0HNOO471MJ1VI" received FIN.
+2026-09-21T20:49:13.2308826Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:13.2309486Z       Connection id "0HNOO471MJ1VI" disconnecting.
+2026-09-21T20:49:13.2310220Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:13.2311021Z       Connection id "0HNOO471MJ1VI" stopped.
+2026-09-21T20:49:13.2312033Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:13.2313389Z       Connection id "0HNOO471MJ1VJ" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:13.2314366Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:13.2315368Z       Connection id "0HNOO471MJ1VI" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:13.2622537Z BROWSER_ATTACK_EXIT_CODE=0
+2026-09-21T20:49:13.2623030Z BROWSER_ATTACK_FINAL_DOM_HAS_EMPTY_JSON=True
+2026-09-21T20:49:14.0135736Z ATTACK_PAGE_SAW_VICTIM_COOKIE=False
+2026-09-21T20:49:14.0136403Z BROWSER_REFRESH_ORIGIN=http://attacker.evil.test:5089
+2026-09-21T20:49:14.0136877Z BROWSER_REFRESH_SAW_VICTIM_COOKIE=False
+2026-09-21T20:49:14.0137177Z BROWSER_REFRESH_STATUS=200
+2026-09-21T20:49:14.0137442Z BROWSER_VICTIM_EVENTS=0
+2026-09-21T20:49:14.0137739Z BROWSER_ATTACKER_CONNECTION_STATE_AFTER=Connected
+2026-09-21T20:49:14.0138093Z TRUE_CROSS_SITE_POST_REACHED_REFRESH=CONFIRMED
+2026-09-21T20:49:14.0138497Z DEFAULT_LAX_COOKIE_NOT_SENT_CROSS_SITE_POST=CONFIRMED
+2026-09-21T20:49:14.0138876Z VICTIM_PRINCIPAL_NOT_PUBLISHED_CROSS_SITE=CONFIRMED
+2026-09-21T20:49:14.0139289Z SAME_SITE_PRECONDITION_IS_BROWSER_COOKIE_BOUNDARY=CONFIRMED
+2026-09-21T20:49:14.0198860Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitRegistry[108]
+2026-09-21T20:49:14.0212312Z       Attempting to disconnect circuit with id ymX6LV1S6lnkVxrT1RRWSBV7IA3Fn_6Pku955K8hcJM from connection 2e9pvyqJ9kl6QQBRPCtM-A.
+2026-09-21T20:49:14.0213903Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitRegistry[111]
+2026-09-21T20:49:14.0215219Z       Circuit with id ymX6LV1S6lnkVxrT1RRWSBV7IA3Fn_6Pku955K8hcJM is disconnected.
+2026-09-21T20:49:14.0216319Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[108]
+2026-09-21T20:49:14.0217715Z       Circuit id 'ymX6LV1S6lnkVxrT1RRWSBV7IA3Fn_6Pku955K8hcJM' disconnected from connection '2e9pvyqJ9kl6QQBRPCtM-A'.
+2026-09-21T20:49:14.0241418Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionHandler[6]
+2026-09-21T20:49:14.0242725Z       OnConnectedAsync ending.
+2026-09-21T20:49:14.0243912Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[7]
+2026-09-21T20:49:14.0245113Z       Waiting for the client to close the socket.
+2026-09-21T20:49:14.0250934Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:14.0252232Z       Connection id "0HNOO471MJ1VE" received FIN.
+2026-09-21T20:49:14.0253567Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[2]
+2026-09-21T20:49:14.0254598Z       Socket closed.
+2026-09-21T20:49:14.0255372Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:14.0256915Z       Connection id "0HNOO471MJ1VE" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:14.0258149Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:14.0259243Z       Connection id "0HNOO471MJ1VE" disconnecting.
+2026-09-21T20:49:14.0260710Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionManager[2]
+2026-09-21T20:49:14.0262165Z       Removing connection 57HjWPCcaQpJw8snNOStQw from the list of connections.
+2026-09-21T20:49:14.0263372Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:14.0264131Z       Executed endpoint '/_blazor'
+2026-09-21T20:49:14.0264981Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:14.0265892Z       Connection id "0HNOO471MJ1VD" received FIN.
+2026-09-21T20:49:14.0266733Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:14.0267577Z       Connection id "0HNOO471MJ1VD" disconnecting.
+2026-09-21T20:49:14.0268414Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:14.0269224Z       Connection id "0HNOO471MJ1VD" stopped.
+2026-09-21T20:49:14.0270114Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:14.0271631Z       Connection id "0HNOO471MJ1VD" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:14.0273202Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:14.0274422Z       Request finished HTTP/1.1 GET http://127.0.0.1:5088/_blazor?id=57HjWPCcaQpJw8snNOStQw - 101 - - 13517.5960ms
+2026-09-21T20:49:14.0275565Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:14.0276297Z       Connection id "0HNOO471MJ1VE" stopped.
+2026-09-21T20:49:14.0299640Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionHandler[6]
+2026-09-21T20:49:14.0312275Z       OnConnectedAsync ending.
+2026-09-21T20:49:14.0313596Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[7]
+2026-09-21T20:49:14.0314600Z       Waiting for the client to close the socket.
+2026-09-21T20:49:14.0315497Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[2]
+2026-09-21T20:49:14.0316338Z       Socket closed.
+2026-09-21T20:49:14.0317065Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionManager[2]
+2026-09-21T20:49:14.0318172Z       Removing connection XnOL7w2gEOtxuKU-kvWybg from the list of connections.
+2026-09-21T20:49:14.0319012Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:14.0319991Z       Executed endpoint '/control'
+2026-09-21T20:49:14.0320782Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:14.0321840Z       Request finished HTTP/1.1 GET http://127.0.0.1:5088/control?id=XnOL7w2gEOtxuKU-kvWybg - 101 - - 13531.7509ms
+2026-09-21T20:49:14.0322923Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:14.0323555Z       Connection id "0HNOO471MJ1VC" received FIN.
+2026-09-21T20:49:14.0324177Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:14.0324809Z       Connection id "0HNOO471MJ1VB" received FIN.
+2026-09-21T20:49:14.0325453Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:14.0326098Z       Connection id "0HNOO471MJ1VC" disconnecting.
+2026-09-21T20:49:14.0326756Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:14.0327413Z       Connection id "0HNOO471MJ1VB" disconnecting.
+2026-09-21T20:49:14.0328088Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:14.0328746Z       Connection id "0HNOO471MJ1VC" stopped.
+2026-09-21T20:49:14.0329289Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:14.0329665Z       Connection id "0HNOO471MJ1VB" stopped.
+2026-09-21T20:49:14.0330064Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:14.0330991Z       Connection id "0HNOO471MJ1VC" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:14.0331643Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:14.0332280Z       Connection id "0HNOO471MJ1VB" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:14.0332869Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:14.0333281Z       Connection id "0HNOO471MJ1VA" received FIN.
+2026-09-21T20:49:14.0333680Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:14.0334073Z       Connection id "0HNOO471MJ1VA" disconnecting.
+2026-09-21T20:49:14.0334464Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:14.0334874Z       Connection id "0HNOO471MJ1VA" stopped.
+2026-09-21T20:49:14.0335264Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:14.0335657Z       Connection id "0HNOO471MJ1V9" received FIN.
+2026-09-21T20:49:14.0336175Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[4]
+2026-09-21T20:49:14.0336736Z       Waiting for the application to finish sending data.
+2026-09-21T20:49:14.0337268Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.Transports.WebSocketsTransport[2]
+2026-09-21T20:49:14.0337736Z       Socket closed.
+2026-09-21T20:49:14.0338078Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:14.0339218Z       Connection id "0HNOO471MJ1VA" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:14.0340262Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:14.0341491Z       Connection id "0HNOO471MJ1V9" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:14.0342377Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:14.0342973Z       Connection id "0HNOO471MJ1V9" disconnecting.
+2026-09-21T20:49:14.0343386Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[6]
+2026-09-21T20:49:14.0343792Z       Connection id "0HNOO471MJ1V8" received FIN.
+2026-09-21T20:49:14.0344215Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[10]
+2026-09-21T20:49:14.0344591Z       Connection id "0HNOO471MJ1V8" disconnecting.
+2026-09-21T20:49:14.0346468Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:14.0346871Z       Connection id "0HNOO471MJ1V8" stopped.
+2026-09-21T20:49:14.0347335Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitRegistry[108]
+2026-09-21T20:49:14.0348334Z       Attempting to disconnect circuit with id y7oc-hkPm2Xg838at3ZFFi-13jEYJrV94G3AwUZAHN4 from connection ZaGLlCaAWgmsjGgb86Itwg.
+2026-09-21T20:49:14.0348992Z dbug: Microsoft.Extensions.Hosting.Internal.Host[3]
+2026-09-21T20:49:14.0349326Z       Hosting stopping
+2026-09-21T20:49:14.0349586Z info: Microsoft.Hosting.Lifetime[0]
+2026-09-21T20:49:14.0349900Z       Application is shutting down...
+2026-09-21T20:49:14.0350292Z dbug: Microsoft.AspNetCore.Server.Kestrel.Transport.Sockets[7]
+2026-09-21T20:49:14.0351114Z       Connection id "0HNOO471MJ1V8" sending FIN because: "The Socket transport's send loop completed gracefully."
+2026-09-21T20:49:14.0351774Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitRegistry[111]
+2026-09-21T20:49:14.0352359Z       Circuit with id y7oc-hkPm2Xg838at3ZFFi-13jEYJrV94G3AwUZAHN4 is disconnected.
+2026-09-21T20:49:14.0352923Z dbug: Microsoft.AspNetCore.Components.Server.Circuits.CircuitHost[108]
+2026-09-21T20:49:14.0353638Z       Circuit id 'y7oc-hkPm2Xg838at3ZFFi-13jEYJrV94G3AwUZAHN4' disconnected from connection 'ZaGLlCaAWgmsjGgb86Itwg'.
+2026-09-21T20:49:14.0354282Z dbug: Microsoft.AspNetCore.SignalR.HubConnectionHandler[6]
+2026-09-21T20:49:14.0354655Z       OnConnectedAsync ending.
+2026-09-21T20:49:14.0355098Z dbug: Microsoft.AspNetCore.Http.Connections.Internal.HttpConnectionManager[2]
+2026-09-21T20:49:14.0355685Z       Removing connection 60emalB-sQ-EJlpThF49TQ from the list of connections.
+2026-09-21T20:49:14.0356171Z info: Microsoft.AspNetCore.Routing.EndpointMiddleware[1]
+2026-09-21T20:49:14.0356533Z       Executed endpoint '/_blazor'
+2026-09-21T20:49:14.0356865Z info: Microsoft.AspNetCore.Hosting.Diagnostics[2]
+2026-09-21T20:49:14.0357460Z       Request finished HTTP/1.1 GET http://127.0.0.1:5088/_blazor?id=60emalB-sQ-EJlpThF49TQ - 101 - - 13802.1265ms
+2026-09-21T20:49:14.0358062Z dbug: Microsoft.AspNetCore.Server.Kestrel.Connections[2]
+2026-09-21T20:49:14.0358448Z       Connection id "0HNOO471MJ1V9" stopped.
+2026-09-21T20:49:14.0358817Z dbug: Microsoft.Extensions.Hosting.Internal.Host[4]
+2026-09-21T20:49:14.0359145Z       Hosting stopped
+2026-09-21T20:49:14.1319194Z Post job cleanup.
+2026-09-21T20:49:14.2721648Z Post job cleanup.
+2026-09-21T20:49:14.3646309Z [command]/usr/bin/git version
+2026-09-21T20:49:14.3692276Z git version 2.55.0
+2026-09-21T20:49:14.3734144Z Temporarily overriding HOME='/home/runner/work/_temp/f99d75b7-1dce-4054-a37e-c1c972fc7e4a' before making global git config changes
+2026-09-21T20:49:14.3735472Z Adding repository directory to the temporary git global config as a safe directory
+2026-09-21T20:49:14.3740267Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/basic-website/basic-website
+2026-09-21T20:49:14.3783005Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-09-21T20:49:14.3822244Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-09-21T20:49:14.4106790Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-09-21T20:49:14.4136869Z http.https://github.com/.extraheader
+2026-09-21T20:49:14.4148174Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-09-21T20:49:14.4184563Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-09-21T20:49:14.4457818Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-09-21T20:49:14.4504021Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-09-21T20:49:14.4934162Z Cleaning up orphan processes
+2026-09-21T20:49:14.5309139Z Terminate orphan process: pid (2846) (MSBuild)
+2026-09-21T20:49:14.5334216Z Terminate orphan process: pid (2882) (VBCSCompiler)
