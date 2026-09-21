@@ -1,0 +1,43 @@
+name: DataProtection revocation stale-ring validation
+
+on:
+  push:
+    branches:
+      - research/dataprotection-revocation-race-20260921
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Runtime info
+        run: dotnet --info
+
+      - name: Default async key-ring behavior
+        working-directory: research/dataprotection-revocation-race
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run -c Release | tee /tmp/default-async.log
+          grep -F 'REVOCATION_BYPASS_WINDOW=CONFIRMED' /tmp/default-async.log
+          grep -F 'AFTER_REFRESH_UNPROTECT_REJECTED=True' /tmp/default-async.log
+          grep -F 'DEFAULT_ASYNC_REVOCATION_RACE=PASS' /tmp/default-async.log
+
+      - name: Synchronous causal control
+        working-directory: research/dataprotection-revocation-race
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run -c Release -- --sync | tee /tmp/sync-guard.log
+          grep -F 'SYNC_GUARD_BLOCKED_UNTIL_AUTHORITATIVE_REFRESH=True' /tmp/sync-guard.log
+          grep -F 'SYNC_GUARD_REVOKED_PAYLOAD_REJECTED=True' /tmp/sync-guard.log
+          grep -F 'SYNC_CAUSAL_CONTROL=PASS' /tmp/sync-guard.log
