@@ -419,6 +419,7 @@ internal static class Program
 
             int serverPid = checked((int)serverPi.dwProcessId);
             Console.WriteLine($"OTS_ELEVATED_SERVER_PID={serverPid}");
+            Console.WriteLine($"OTS_ELEVATED_SERVER_SID={GetProcessSid(serverPid)}");
             await File.WriteAllTextAsync(serverPidFile, serverPid.ToString());
 
             using Process server = Process.GetProcessById(serverPid);
@@ -501,6 +502,7 @@ internal static class Program
 
             int serverPid = checked((int)serverPi.dwProcessId);
             Console.WriteLine($"CROSS_SID_ELEVATED_SERVER_PID={serverPid}");
+            Console.WriteLine($"CROSS_SID_ELEVATED_SERVER_SID={GetProcessSid(serverPid)}");
             await Task.Delay(150);
 
             attackerPi = StartProcessWithToken(
@@ -747,6 +749,25 @@ internal static class Program
         }
     }
 
+    private static string GetProcessSid(int processId)
+    {
+        using Process process = Process.GetProcessById(processId);
+        if (!OpenProcessToken(process.Handle, 0x0008, out IntPtr token))
+        {
+            return $"ERROR:{Marshal.GetLastWin32Error()}";
+        }
+
+        try
+        {
+            using var identity = new WindowsIdentity(token);
+            return identity.User?.Value ?? "<null>";
+        }
+        finally
+        {
+            CloseHandle(token);
+        }
+    }
+
     private static PROCESS_INFORMATION StartProcessWithToken(IntPtr token, string application, string arguments, string workingDirectory, bool loadProfile = true)
     {
         var commandLine = new StringBuilder($"\"{application}\" {arguments}");
@@ -783,12 +804,53 @@ internal static class Program
             OTS_STARTUPINFOEX si = new();
             si.StartupInfo.cb = Marshal.SizeOf<OTS_STARTUPINFOEX>();
             si.lpAttributeList = attributeList;
-            var commandLine = new StringBuilder(commandLineText);
-            if (!OtsCreateProcessW(application, commandLine, IntPtr.Zero, IntPtr.Zero, false, OtsExtendedStartupInfoPresent | OtsCreateNoWindow, IntPtr.Zero, workingDirectory, ref si, out PROCESS_INFORMATION pi))
+            const uint TokenAssignPrimary = 0x0001;
+            const uint TokenDuplicate = 0x0002;
+            const uint TokenQuery = 0x0008;
+            const uint TokenAdjustDefault = 0x0080;
+            const uint TokenAdjustSessionId = 0x0100;
+
+            uint desiredAccess =
+                TokenAssignPrimary |
+                TokenDuplicate |
+                TokenQuery |
+                TokenAdjustDefault |
+                TokenAdjustSessionId;
+
+            if (!OpenProcessToken(Process.GetCurrentProcess().Handle, desiredAccess, out IntPtr currentAdminToken))
             {
-                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "CreateProcessW explicit parent failed");
+                throw new System.ComponentModel.Win32Exception(
+                    Marshal.GetLastWin32Error(),
+                    "OpenProcessToken current admin failed");
             }
-            return pi;
+
+            try
+            {
+                var commandLine = new StringBuilder(commandLineText);
+                if (!OtsCreateProcessAsUserW(
+                    currentAdminToken,
+                    application,
+                    commandLine,
+                    IntPtr.Zero,
+                    IntPtr.Zero,
+                    false,
+                    OtsExtendedStartupInfoPresent | OtsCreateNoWindow,
+                    IntPtr.Zero,
+                    workingDirectory,
+                    ref si,
+                    out PROCESS_INFORMATION pi))
+                {
+                    throw new System.ComponentModel.Win32Exception(
+                        Marshal.GetLastWin32Error(),
+                        "CreateProcessAsUserW explicit parent failed");
+                }
+
+                return pi;
+            }
+            finally
+            {
+                CloseHandle(currentAdminToken);
+            }
         }
         finally
         {
@@ -1582,6 +1644,21 @@ internal static class Program
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CreateProcessW")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool OtsCreateProcessW(string? lpApplicationName, StringBuilder lpCommandLine, IntPtr lpProcessAttributes, IntPtr lpThreadAttributes, [MarshalAs(UnmanagedType.Bool)] bool bInheritHandles, uint dwCreationFlags, IntPtr lpEnvironment, string? lpCurrentDirectory, ref OTS_STARTUPINFOEX lpStartupInfo, out PROCESS_INFORMATION lpProcessInformation);
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode, EntryPoint = "CreateProcessAsUserW")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OtsCreateProcessAsUserW(
+        IntPtr hToken,
+        string? lpApplicationName,
+        StringBuilder lpCommandLine,
+        IntPtr lpProcessAttributes,
+        IntPtr lpThreadAttributes,
+        [MarshalAs(UnmanagedType.Bool)] bool bInheritHandles,
+        uint dwCreationFlags,
+        IntPtr lpEnvironment,
+        string? lpCurrentDirectory,
+        ref OTS_STARTUPINFOEX lpStartupInfo,
+        out PROCESS_INFORMATION lpProcessInformation);
 
     [DllImport("kernel32.dll", SetLastError = true, EntryPoint = "TerminateProcess")]
     [return: MarshalAs(UnmanagedType.Bool)]
