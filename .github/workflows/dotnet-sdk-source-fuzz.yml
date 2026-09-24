@@ -1,0 +1,70 @@
+name: Source-Built .NET SDK Fuzz
+
+on:
+  push:
+    branches:
+      - dotnet-fuzz-public-run-20260924
+    paths:
+      - ".github/workflows/dotnet-sdk-source-fuzz.yml"
+      - "source-fuzz/sdk_source_fuzz.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sdk-source-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sdk-source-fuzz:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@v4
+
+      - name: Clone SDK source
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          git clone --depth 1 https://github.com/dotnet/sdk.git source-target
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          git -C source-target rev-parse HEAD | Out-File -Encoding ascii out/source-sha.txt
+
+      - name: Build SDK from source
+        shell: pwsh
+        run: |
+          Push-Location source-target
+          & .\build.cmd -skipCrossgen -skipInstallers *> ..\out\build.log
+          $e=$LASTEXITCODE
+          "build_exit=$e" | Out-File -Encoding ascii ..\out\status.txt
+          Pop-Location
+          exit 0
+
+      - name: Fuzz repo-built dotnet
+        shell: pwsh
+        run: |
+          $dotnet = Resolve-Path .\source-target\artifacts\bin\redist\Debug\dotnet\dotnet.exe -ErrorAction SilentlyContinue
+          if ($null -ne $dotnet) {
+            & python .\source-fuzz\sdk_source_fuzz.py --dotnet $dotnet --source .\source-target --out .\out\fuzz *> .\out\fuzz-driver.log
+            "fuzz_exit=$LASTEXITCODE" | Add-Content .\out\status.txt
+          } else {
+            "repo_built_dotnet_missing=1" | Add-Content .\out\status.txt
+          }
+          exit 0
+
+      - name: Encrypt results
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory out -OutputDirectory secure -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload encrypted results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-sdk-source-fuzz
+          path: secure/*.enc
+          if-no-files-found: error
