@@ -43,6 +43,9 @@ jobs:
           & .\eng\build.ps1 -Restore -NoBuildNative -NoBuildJava -NoBuildInstallers -Configuration Release -Projects "$(Resolve-Path .\src\Fuzzing\AspNetCoreFuzzing\AspNetCoreFuzzing.csproj)" *> ..\out\managed-build.log
           $buildExit = $LASTEXITCODE
           "build_exit=$buildExit" | Out-File -Encoding ascii ..\out\status.txt
+          if (Test-Path .\artifacts\log) {
+            Copy-Item .\artifacts\log ..\out\repo-logs -Recurse -Force
+          }
           if ($buildExit -eq 0) {
             . .\activate.ps1
             Push-Location src\Fuzzing\AspNetCoreFuzzing
