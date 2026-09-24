@@ -57,6 +57,8 @@ jobs:
           if [ -x build-oracle/protocol_mutator ]; then
             build-oracle/protocol_mutator 12000 5063812098668826435 out/oracle/candidates > out/oracle/driver.log 2>&1
             echo "fuzz_exit=$?" >> out/oracle/status.txt
+            echo "=== SAFE ORACLE SUMMARY ==="
+            cat out/oracle/candidates/summary.txt || true
           else
             echo "binary_missing=1" >> out/oracle/status.txt
           fi
@@ -135,8 +137,17 @@ jobs:
           if [ -x build-oracle-san/protocol_mutator ]; then
             build-oracle-san/protocol_mutator 6000 117979518330473 out/sanitizer/candidates > out/sanitizer/oracle-driver.log 2>&1
             echo "oracle_exit=$?" >> out/sanitizer/status.txt
+            echo "=== SAFE SANITIZER ORACLE SUMMARY ==="
+            cat out/sanitizer/candidates/summary.txt || true
           else
             echo "oracle_binary_missing=1" >> out/sanitizer/status.txt
+          fi
+          echo "=== SAFE SANITIZER STATUS ==="
+          cat out/sanitizer/status.txt || true
+          if grep -R -E "ERROR: AddressSanitizer|runtime error:|UndefinedBehaviorSanitizer|LeakSanitizer" out/sanitizer/*.log out/sanitizer/oracle-driver.log 2>/dev/null; then
+            echo "sanitizer_signal=1"
+          else
+            echo "sanitizer_signal=0"
           fi
           set -e
 
