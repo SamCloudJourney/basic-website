@@ -174,7 +174,12 @@ internal static class Program
                 s = (s + s.Substring(p, len)).Length > 65536 ? (s + s.Substring(p, len))[..65536] : s + s.Substring(p, len);
             }
             else if (choice == 4 && s.Length < 65536)
-                s = (s + new string(r.Next(2) == 0 ? '[' : '{', r.Next(1, 128)))[..Math.Min(65536, s.Length + r.Next(1, 128))];
+            {
+                char c = r.Next(2) == 0 ? '[' : '{';
+                int n = r.Next(1, 128);
+                s += new string(c, n);
+                if (s.Length > 65536) s = s[..65536];
+            }
             else if (choice == 5)
                 s = s.Replace("version", r.Next(2) == 0 ? "Version" : "VERSION", StringComparison.Ordinal);
             else if (choice == 6 && s.Length > 0)
