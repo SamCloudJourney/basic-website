@@ -47,10 +47,13 @@ jobs:
             echo "oracle_exit=$?" >> out/status.txt
             echo "=== SAFE BAM FULL-BUNDLE SUMMARY ==="
             cat out/candidates/summary.txt || true
-            cat out/status.txt || true
           else
             echo "binary_missing=1" >> out/status.txt
+            echo "=== SAFE BUILD DIAGNOSTIC ==="
+            tail -n 80 out/build.log || true
           fi
+          echo "=== SAFE STATUS ==="
+          cat out/status.txt || true
           set -e
 
       - name: Encrypt candidate data
