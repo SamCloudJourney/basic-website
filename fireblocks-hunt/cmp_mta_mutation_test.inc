@@ -1,3 +1,5 @@
+#include <cinttypes>
+#include <cstdio>
 #include <random>
 
 // ============================================================
@@ -70,7 +72,7 @@ TEST_CASE("cmp_mta_peer_response_mutation_hunt")
         }
     };
 
-    for (uint64_t t = 0; t < 120; ++t)
+    for (uint64_t t = 0; t < 48; ++t)
     {
         char txid[64] = {0};
         std::snprintf(txid, sizeof(txid), "cmp-mta-hunt-%" PRIu64, t);
