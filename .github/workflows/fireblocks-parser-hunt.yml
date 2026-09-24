@@ -44,6 +44,9 @@ jobs:
           if [ -x build-parser/parser_mutator ]; then
             build-parser/parser_mutator 12000 882369217 out/release/candidates > out/release/driver.log 2>&1
             echo "fuzz_exit=$?" >> out/release/status.txt
+            echo "=== SAFE RELEASE PARSER SUMMARY ==="
+            cat out/release/candidates/summary.txt || true
+            cat out/release/status.txt || true
           else
             echo "binary_missing=1" >> out/release/status.txt
           fi
@@ -101,6 +104,10 @@ jobs:
           if [ -x build-parser-san/parser_mutator ]; then
             build-parser-san/parser_mutator 8000 882369218 out/sanitizer/candidates > out/sanitizer/driver.log 2>&1
             echo "fuzz_exit=$?" >> out/sanitizer/status.txt
+            echo "=== SAFE SANITIZER PARSER SUMMARY ==="
+            cat out/sanitizer/candidates/summary.txt || true
+            cat out/sanitizer/status.txt || true
+            if grep -R -E "ERROR: AddressSanitizer|runtime error:|UndefinedBehaviorSanitizer|LeakSanitizer" out/sanitizer/*.log out/sanitizer/driver.log 2>/dev/null; then echo "sanitizer_signal=1"; else echo "sanitizer_signal=0"; fi
           else
             echo "binary_missing=1" >> out/sanitizer/status.txt
           fi
