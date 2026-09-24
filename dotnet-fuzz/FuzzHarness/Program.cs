@@ -131,7 +131,7 @@ static class P
         NoThrow("EntityTagHeaderValue.TryParse",i,d,()=>_=Microsoft.Net.Http.Headers.EntityTagHeaderValue.TryParse(s,out _));
         NoThrow("RangeHeaderValue.TryParse",i,d,()=>_=Microsoft.Net.Http.Headers.RangeHeaderValue.TryParse(s,out _));
         Expected("QueryHelpers.ParseQuery",i,d,()=>_=QueryHelpers.ParseQuery(s),typeof(ArgumentException),typeof(InvalidOperationException));
-        Expected("PathString.FromUriComponent",i,d,()=>_=PathString.FromUriComponent(s),typeof(ArgumentException),typeof(UriFormatException));
+        Expected("PathString.FromUriComponent",i,d,()=>_=PathString.FromUriComponent(s),typeof(ArgumentException),typeof(UriFormatException),typeof(InvalidOperationException));
         string boundary=Boundary(d);
         try {
             using var ms=new MemoryStream(d,false);

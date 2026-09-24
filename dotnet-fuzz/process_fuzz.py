@@ -37,12 +37,26 @@ def save(outdir,surface,idx,payload,result,cmd):
     stem.with_suffix(".input.txt").write_text(payload,encoding="utf-8",errors="surrogatepass")
     stem.with_suffix(".json").write_text(json.dumps({"surface":surface,"index":idx,"result":result,"command":cmd},indent=2),encoding="utf-8")
 
+def collect_source_seeds(target,suffixes,limit=260,contains=None):
+    seeds=[]
+    for p in Path(target).rglob("*"):
+        if len(seeds)>=limit:
+            break
+        try:
+            if p.is_file() and p.suffix.lower() in suffixes and p.stat().st_size<=65536:
+                s=p.read_text(encoding="utf-8",errors="ignore")
+                if s.strip() and (contains is None or any(x in s for x in contains)):
+                    seeds.append(s)
+        except Exception:
+            pass
+    return seeds
+
 def roslyn(n,rng,target,outdir):
     info=subprocess.check_output(["dotnet","--info"],text=True,errors="replace")
     sdk_base=next((x.split(":",1)[1].strip() for x in info.splitlines() if x.strip().startswith("Base Path:")),None)
     if not sdk_base: raise RuntimeError("no SDK Base Path")
     csc=Path(sdk_base)/"Roslyn"/"bincore"/"csc.dll"
-    seeds=["class C { static void Main() {} }","class C<T> where T:class,new() { T M<U>(U x)=>new T(); }","record R(int X) { public required string S {get;init;} }","#nullable enable\nfile class C { string? s; }","class C { string S = $$\"\"\"{{{{1+2}}}}\"\"\"; }","unsafe class C { int* p; }","[System.Obsolete] class C { dynamic x; }","#if X\nclass A{}\n#else\nclass B{}\n#endif","class Ω { string a = \"\\uD800\"; }"]
+    seeds=collect_source_seeds(target,{".cs"},260)+["class C { static void Main() {} }","class C<T> where T:class,new() { T M<U>(U x)=>new T(); }","record R(int X) { public required string S {get;init;} }","#nullable enable\nfile class C { string? s; }","class C { string S = $$\"\"\"{{{{1+2}}}}\"\"\"; }","unsafe class C { int* p; }","[System.Obsolete] class C { dynamic x; }","#if X\nclass A{}\n#else\nclass B{}\n#endif","class Ω { string a = \"\\uD800\"; }"]
     work=Path(tempfile.mkdtemp(prefix="roslyn-fuzz-")); c=0
     for i in range(n):
         src=mutate(rng,rng.choice(seeds)); f=work/"input.cs"; o=work/"out.dll"
@@ -52,7 +66,7 @@ def roslyn(n,rng,target,outdir):
     return c
 
 def sdk(n,rng,target,outdir):
-    seeds=['<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>','<Project><PropertyGroup><A>$(A)</A><B>$([System.String]::Copy(\'x\'))</B></PropertyGroup></Project>','<Project><ItemGroup><Compile Include="**/*.cs" Exclude="../**/*" /></ItemGroup></Project>','<Project><Import Project="$(MSBuildToolsPath)\\Microsoft.Common.props" Condition="Exists(\'$(MSBuildToolsPath)\\Microsoft.Common.props\')" /></Project>','<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFrameworks>net10.0;net9.0</TargetFrameworks><RuntimeIdentifier>win-x64</RuntimeIdentifier><PublishProfile>DefaultContainer</PublishProfile></PropertyGroup></Project>']
+    seeds=collect_source_seeds(target,{".csproj",".props",".targets",".proj"},260)+['<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>','<Project><PropertyGroup><A>$(A)</A><B>$([System.String]::Copy(\'x\'))</B></PropertyGroup></Project>','<Project><ItemGroup><Compile Include="**/*.cs" Exclude="../**/*" /></ItemGroup></Project>','<Project><Import Project="$(MSBuildToolsPath)\\Microsoft.Common.props" Condition="Exists(\'$(MSBuildToolsPath)\\Microsoft.Common.props\')" /></Project>','<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><TargetFrameworks>net10.0;net9.0</TargetFrameworks><RuntimeIdentifier>win-x64</RuntimeIdentifier><PublishProfile>DefaultContainer</PublishProfile></PropertyGroup></Project>']
     work=Path(tempfile.mkdtemp(prefix="sdk-fuzz-")); c=0
     for i in range(n):
         payload=mutate(rng,rng.choice(seeds)); proj=work/"fuzz.csproj"; pp=work/"pp.xml"
@@ -63,7 +77,7 @@ def sdk(n,rng,target,outdir):
     return c
 
 def templating(n,rng,target,outdir):
-    seeds=['{"$schema":"http://json.schemastore.org/template","author":"fuzz","classifications":["Test"],"identity":"Fuzz.Template","name":"Fuzz","shortName":"fuzzx","sourceName":"SOURCE"}','{"identity":"Fuzz.Template","name":"Fuzz","shortName":"fuzzx","symbols":{"p":{"type":"parameter","datatype":"string","defaultValue":"x"}}}','{"identity":"Fuzz.Template","name":"Fuzz","shortName":"fuzzx","sources":[{"modifiers":[{"exclude":["**/bin/**","../**"]}]}]}']
+    seeds=collect_source_seeds(target,{".json"},260,contains=["\"identity\"","\"shortName\"","template"])+['{"$schema":"http://json.schemastore.org/template","author":"fuzz","classifications":["Test"],"identity":"Fuzz.Template","name":"Fuzz","shortName":"fuzzx","sourceName":"SOURCE"}','{"identity":"Fuzz.Template","name":"Fuzz","shortName":"fuzzx","symbols":{"p":{"type":"parameter","datatype":"string","defaultValue":"x"}}}','{"identity":"Fuzz.Template","name":"Fuzz","shortName":"fuzzx","sources":[{"modifiers":[{"exclude":["**/bin/**","../**"]}]}]}']
     home=Path(tempfile.mkdtemp(prefix="template-home-")); root=Path(tempfile.mkdtemp(prefix="template-fuzz-")); env=os.environ.copy(); env["DOTNET_CLI_HOME"]=str(home); c=0
     for i in range(n):
         t=root/"t"
