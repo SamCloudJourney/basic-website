@@ -1,0 +1,71 @@
+name: Fireblocks BAM Full Setup Proof Oracle
+
+on:
+  push:
+    branches:
+      - fireblocks-mpc-hunt-20260924
+    paths:
+      - "fireblocks-hunt/bam_setup_bundle_oracle.cpp"
+      - "fireblocks-hunt/CMakeLists.txt"
+      - ".github/workflows/fireblocks-bam-bundle-oracle.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fireblocks-bam-bundle-oracle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-proof-bundle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y build-essential cmake pkg-config uuid-dev libssl-dev >/dev/null
+
+      - name: Clone exact in-scope revision
+        run: |
+          git clone https://github.com/fireblocks/mpc-lib.git target >/dev/null 2>&1
+          git -C target checkout 00ae08b7f1bdbb887aedece384aca2f942aae432 >/dev/null 2>&1
+          mkdir -p out
+          git -C target rev-parse HEAD > out/source-sha.txt
+
+      - name: Build full BAM setup oracle
+        run: |
+          set +e
+          cmake -S fireblocks-hunt -B build -DMPC_SOURCE="$PWD/target" -DCMAKE_BUILD_TYPE=Release > out/configure.log 2>&1
+          echo "configure_exit=$?" > out/status.txt
+          cmake --build build --target bam_setup_bundle_oracle -j 2 > out/build.log 2>&1
+          echo "build_exit=$?" >> out/status.txt
+          if [ -x build/bam_setup_bundle_oracle ]; then
+            build/bam_setup_bundle_oracle 1200 186944778601036 out/candidates > out/driver.log 2>&1
+            echo "oracle_exit=$?" >> out/status.txt
+            echo "=== SAFE BAM FULL-BUNDLE SUMMARY ==="
+            cat out/candidates/summary.txt || true
+            cat out/status.txt || true
+          else
+            echo "binary_missing=1" >> out/status.txt
+          fi
+          set -e
+
+      - name: Encrypt candidate data
+        if: always()
+        run: |
+          chmod +x fireblocks-hunt/encrypt.sh
+          fireblocks-hunt/encrypt.sh out secure fireblocks-hunt/public.pem
+
+      - name: Upload encrypted candidate data
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-fireblocks-bam-full-bundle
+          path: |
+            secure/results.tar.gz.enc
+            secure/key.bin.enc
+            secure/iv.hex
+          if-no-files-found: error
