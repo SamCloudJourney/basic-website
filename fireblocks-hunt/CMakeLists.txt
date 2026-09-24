@@ -16,5 +16,5 @@ target_link_libraries(protocol_mutator PRIVATE cosigner)
 target_compile_options(protocol_mutator PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(bam_setup_bundle_oracle bam_setup_bundle_oracle.cpp)
-target_link_libraries(bam_setup_bundle_oracle PRIVATE cosigner OpenSSL::Crypto)
+target_link_libraries(bam_setup_bundle_oracle PRIVATE cosigner)
 target_compile_options(bam_setup_bundle_oracle PRIVATE -Wall -Wextra -Wpedantic)
