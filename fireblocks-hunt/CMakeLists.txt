@@ -12,5 +12,5 @@ set(MPC_LIB_SKIP_TESTS ON CACHE BOOL "" FORCE)
 add_subdirectory("${MPC_SOURCE}" mpc-lib-build)
 
 add_executable(protocol_mutator protocol_mutator.cpp)
-target_link_libraries(protocol_mutator PRIVATE cosigner OpenSSL::Crypto)
+target_link_libraries(protocol_mutator PRIVATE cosigner)
 target_compile_options(protocol_mutator PRIVATE -Wall -Wextra -Wpedantic)
