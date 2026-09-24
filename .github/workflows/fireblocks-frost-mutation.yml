@@ -1,0 +1,85 @@
+name: Fireblocks FROST Peer Mutation Hunt
+
+on:
+  push:
+    branches:
+      - fireblocks-mpc-hunt-20260924
+    paths:
+      - "fireblocks-hunt/frost_mutation_test.inc"
+      - ".github/workflows/fireblocks-frost-mutation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fireblocks-frost-mutation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frost-peer-mutation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y build-essential cmake pkg-config uuid-dev libssl-dev >/dev/null
+
+      - name: Clone exact in-scope revision and append property test
+        run: |
+          git clone https://github.com/fireblocks/mpc-lib.git target >/dev/null 2>&1
+          git -C target checkout 00ae08b7f1bdbb887aedece384aca2f942aae432 >/dev/null 2>&1
+          cat fireblocks-hunt/frost_mutation_test.inc >> target/test/cosigner/frost_test.cpp
+          mkdir -p out
+          git -C target rev-parse HEAD > out/source-sha.txt
+
+      - name: Build FROST mutation test
+        run: |
+          set +e
+          cmake -S target -B build -DCMAKE_BUILD_TYPE=Release > out/configure.log 2>&1
+          echo "configure_exit=$?" > out/status.txt
+          cmake --build build --target cosigner_test -j 2 > out/build.log 2>&1
+          echo "build_exit=$?" >> out/status.txt
+          if [ ! -x build/test/cosigner/cosigner_test ]; then
+            echo "binary_missing=1" >> out/status.txt
+            echo "=== SAFE BUILD DIAGNOSTIC ==="
+            tail -n 80 out/build.log || true
+          fi
+          set -e
+
+      - name: Run FROST peer mutation oracle
+        run: |
+          set +e
+          if [ -x build/test/cosigner/cosigner_test ]; then
+            build/test/cosigner/cosigner_test "frost_peer_message_mutation_hunt" > out/test.log 2>&1
+            echo "test_exit=$?" >> out/status.txt
+            echo "=== SAFE FROST MUTATION SUMMARY ==="
+            grep "FROST_MUTATION_SUMMARY" out/test.log || true
+            if grep -q "honest FROST server finalized\|FROST signing completed after" out/test.log; then
+              echo "security_invariant_failure=1"
+            else
+              echo "security_invariant_failure=0"
+            fi
+          fi
+          cat out/status.txt
+          set -e
+
+      - name: Encrypt detailed output
+        if: always()
+        run: |
+          chmod +x fireblocks-hunt/encrypt.sh
+          fireblocks-hunt/encrypt.sh out secure fireblocks-hunt/public.pem
+
+      - name: Upload encrypted details
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-fireblocks-frost-mutation
+          path: |
+            secure/results.tar.gz.enc
+            secure/key.bin.enc
+            secure/iv.hex
+          if-no-files-found: error
