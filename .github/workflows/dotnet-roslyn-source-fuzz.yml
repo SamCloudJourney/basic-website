@@ -1,0 +1,74 @@
+name: Source-Built Roslyn Fuzz
+
+on:
+  push:
+    branches:
+      - dotnet-fuzz-public-run-20260924
+    paths:
+      - ".github/workflows/dotnet-roslyn-source-fuzz.yml"
+      - "source-fuzz/roslyn_source_fuzz.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: roslyn-source-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  roslyn-source-fuzz:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@v4
+
+      - name: Clone Roslyn source
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          git clone --depth 1 https://github.com/dotnet/roslyn.git source-target
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          git -C source-target rev-parse HEAD | Out-File -Encoding ascii out/source-sha.txt
+
+      - name: Build Roslyn from source
+        shell: pwsh
+        run: |
+          Push-Location source-target
+          & .\eng\build.ps1 -configuration Release -ci -restore -build -msbuildEngine dotnet *> ..\out\build.log
+          $e=$LASTEXITCODE
+          "build_exit=$e" | Out-File -Encoding ascii ..\out\status.txt
+          Pop-Location
+          exit 0
+
+      - name: Fuzz repo-built csc
+        shell: pwsh
+        run: |
+          $dotnet = Resolve-Path .\source-target\.dotnet\dotnet.exe -ErrorAction SilentlyContinue
+          $csc = Get-ChildItem .\source-target\artifacts\bin -Recurse -Filter csc.dll -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\csc\\Release\\' } |
+            Select-Object -First 1
+          if ($null -ne $dotnet -and $null -ne $csc) {
+            & python .\source-fuzz\roslyn_source_fuzz.py --dotnet $dotnet --csc $csc.FullName --source .\source-target --out .\out\fuzz *> .\out\fuzz-driver.log
+            "fuzz_exit=$LASTEXITCODE" | Add-Content .\out\status.txt
+            "csc=$($csc.FullName)" | Add-Content .\out\status.txt
+          } else {
+            "repo_built_csc_missing=1" | Add-Content .\out\status.txt
+          }
+          exit 0
+
+      - name: Encrypt results
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory out -OutputDirectory secure -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload encrypted results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-roslyn-source-fuzz
+          path: secure/*.enc
+          if-no-files-found: error
