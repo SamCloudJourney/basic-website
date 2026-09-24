@@ -1,0 +1,112 @@
+name: Fireblocks MPC Memory Safety Follow-up
+
+on:
+  push:
+    branches:
+      - fireblocks-mpc-hunt-20260924
+    paths:
+      - ".github/workflows/fireblocks-memory-hunt.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fireblocks-memory-followup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  asan-without-alignment:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y build-essential clang cmake pkg-config uuid-dev libssl-dev >/dev/null
+      - name: Clone target
+        run: |
+          git clone https://github.com/fireblocks/mpc-lib.git target >/dev/null 2>&1
+          git -C target checkout 00ae08b7f1bdbb887aedece384aca2f942aae432 >/dev/null 2>&1
+          mkdir -p out/no-align
+          git -C target rev-parse HEAD > out/no-align/source-sha.txt
+      - name: Fuzz with ASAN and non-alignment UBSAN
+        env:
+          CC: clang
+          CXX: clang++
+          CFLAGS: -O1 -g -fsanitize=address,undefined -fno-sanitize=alignment -fno-omit-frame-pointer
+          CXXFLAGS: -O1 -g -fsanitize=address,undefined -fno-sanitize=alignment -fno-omit-frame-pointer
+          LDFLAGS: -fsanitize=address,undefined
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:symbolize=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          set +e
+          cmake -S fireblocks-parser -B build-no-align -DMPC_SOURCE="$PWD/target" -DCMAKE_BUILD_TYPE=RelWithDebInfo > out/no-align/configure.log 2>&1
+          echo "configure_exit=$?" > out/no-align/status.txt
+          cmake --build build-no-align --target parser_mutator -j 2 > out/no-align/build.log 2>&1
+          echo "build_exit=$?" >> out/no-align/status.txt
+          if [ -x build-no-align/parser_mutator ]; then
+            build-no-align/parser_mutator 20000 9988776655 out/no-align/candidates > out/no-align/driver.log 2>&1
+            echo "fuzz_exit=$?" >> out/no-align/status.txt
+          else
+            echo "binary_missing=1" >> out/no-align/status.txt
+          fi
+          set -e
+      - name: Encrypt
+        if: always()
+        run: |
+          chmod +x fireblocks-hunt/encrypt.sh
+          fireblocks-hunt/encrypt.sh out secure fireblocks-hunt/public.pem
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: encrypted-fireblocks-no-alignment-sanitizer
+          path: |
+            secure/results.tar.gz.enc
+            secure/key.bin.enc
+            secure/iv.hex
+
+  native-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y build-essential cmake pkg-config uuid-dev libssl-dev >/dev/null
+      - name: Clone target
+        run: |
+          git clone https://github.com/fireblocks/mpc-lib.git target >/dev/null 2>&1
+          git -C target checkout 00ae08b7f1bdbb887aedece384aca2f942aae432 >/dev/null 2>&1
+          mkdir -p out/arm64
+          uname -a > out/arm64/platform.txt
+          git -C target rev-parse HEAD > out/arm64/source-sha.txt
+      - name: Build and execute optimized parser mutations
+        run: |
+          set +e
+          cmake -S fireblocks-parser -B build-arm -DMPC_SOURCE="$PWD/target" -DCMAKE_BUILD_TYPE=Release > out/arm64/configure.log 2>&1
+          echo "configure_exit=$?" > out/arm64/status.txt
+          cmake --build build-arm --target parser_mutator -j 2 > out/arm64/build.log 2>&1
+          echo "build_exit=$?" >> out/arm64/status.txt
+          if [ -x build-arm/parser_mutator ]; then
+            build-arm/parser_mutator 12000 9988776656 out/arm64/candidates > out/arm64/driver.log 2>&1
+            echo "fuzz_exit=$?" >> out/arm64/status.txt
+          else
+            echo "binary_missing=1" >> out/arm64/status.txt
+          fi
+          set -e
+      - name: Encrypt
+        if: always()
+        run: |
+          chmod +x fireblocks-hunt/encrypt.sh
+          fireblocks-hunt/encrypt.sh out secure fireblocks-hunt/public.pem
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: encrypted-fireblocks-arm64-parser
+          path: |
+            secure/results.tar.gz.enc
+            secure/key.bin.enc
+            secure/iv.hex
