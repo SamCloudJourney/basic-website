@@ -149,7 +149,7 @@ jobs:
           - surface: aspnetcore
             repo: dotnet/aspnetcore
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout controller
         uses: actions/checkout@v4
@@ -206,6 +206,16 @@ jobs:
           Write-Host ("NATIVE_ARTIFACT_FILES=" + $nativeArtifacts)
           Pop-Location
           exit 0
+
+      - name: Install pinned Windows SDK for ASP.NET Core native projects
+        if: matrix.surface == 'aspnetcore'
+        shell: pwsh
+        run: |
+          winget install --id Microsoft.WindowsSDK.10.0.22621 --source winget --silent --disable-interactivity --accept-source-agreements --accept-package-agreements
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "winget exit=$LASTEXITCODE; checking whether SDK is already present"
+          }
+          Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\Lib" -Directory -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Name
 
       - name: Build and coverage-fuzz ASP.NET Core official target
         if: matrix.surface == 'aspnetcore'
