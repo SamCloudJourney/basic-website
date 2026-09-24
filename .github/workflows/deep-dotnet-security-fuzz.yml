@@ -1,0 +1,236 @@
+name: Deep .NET Security Fuzz
+
+on:
+  push:
+    branches:
+      - dotnet-fuzz-public-run-20260924
+    paths:
+      - ".github/workflows/deep-dotnet-security-fuzz.yml"
+      - "deep-fuzz/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deep-dotnet-security-fuzz-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kestrel-segmentation:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+
+      - name: Clone ASP.NET Core
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          git clone --depth 1 https://github.com/dotnet/aspnetcore.git source-target
+          New-Item -ItemType Directory -Force -Path out/kestrel | Out-Null
+          git -C source-target rev-parse HEAD | Out-File -Encoding ascii out/kestrel/source-sha.txt
+
+      - name: Build source-linked Kestrel fuzzer
+        shell: pwsh
+        run: |
+          & dotnet restore .\deep-fuzz\KestrelSegFuzz\KestrelSegFuzz.csproj --configfile .\source-target\NuGet.config -p:RestoreIgnoreFailedSources=true *> .\out\kestrel\restore.log
+          "restore_exit=$LASTEXITCODE" | Out-File -Encoding ascii .\out\kestrel\status.txt
+          if ($LASTEXITCODE -eq 0) {
+            & dotnet build .\deep-fuzz\KestrelSegFuzz\KestrelSegFuzz.csproj -c Release --no-restore *> .\out\kestrel\build.log
+            "build_exit=$LASTEXITCODE" | Add-Content .\out\kestrel\status.txt
+          }
+          exit 0
+
+      - name: Fuzz Kestrel parser segmentation
+        shell: pwsh
+        run: |
+          if (Test-Path .\deep-fuzz\KestrelSegFuzz\bin\Release\net11.0\KestrelSegFuzz.dll) {
+            & dotnet run --project .\deep-fuzz\KestrelSegFuzz\KestrelSegFuzz.csproj -c Release --no-build -- 60000 24681357 .\out\kestrel *> .\out\kestrel\driver.log
+            "fuzz_exit=$LASTEXITCODE" | Add-Content .\out\kestrel\status.txt
+          } else {
+            "fuzzer_binary_missing=1" | Add-Content .\out\kestrel\status.txt
+          }
+          exit 0
+
+      - name: Encrypt Kestrel results
+        if: always()
+        shell: pwsh
+        run: |
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory .\out\kestrel -OutputDirectory .\secure\kestrel -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload Kestrel results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-deep-kestrel
+          path: secure/kestrel/*.enc
+          if-no-files-found: error
+
+  workload-manifest:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+
+      - name: Clone SDK
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          git clone --depth 1 https://github.com/dotnet/sdk.git source-target
+          New-Item -ItemType Directory -Force -Path out/workload | Out-Null
+          git -C source-target rev-parse HEAD | Out-File -Encoding ascii out/workload/source-sha.txt
+
+      - name: Build source-linked workload reader fuzzer
+        shell: pwsh
+        run: |
+          & dotnet restore .\deep-fuzz\WorkloadManifestFuzz\WorkloadManifestFuzz.csproj --configfile .\source-target\NuGet.config -p:RestoreIgnoreFailedSources=true *> .\out\workload\restore.log
+          "restore_exit=$LASTEXITCODE" | Out-File -Encoding ascii .\out\workload\status.txt
+          if ($LASTEXITCODE -eq 0) {
+            & dotnet build .\deep-fuzz\WorkloadManifestFuzz\WorkloadManifestFuzz.csproj -c Release --no-restore *> .\out\workload\build.log
+            "build_exit=$LASTEXITCODE" | Add-Content .\out\workload\status.txt
+          }
+          exit 0
+
+      - name: Fuzz workload manifest stream boundaries
+        shell: pwsh
+        run: |
+          if (Test-Path .\deep-fuzz\WorkloadManifestFuzz\bin\Release\net11.0\WorkloadManifestFuzz.dll) {
+            & dotnet run --project .\deep-fuzz\WorkloadManifestFuzz\WorkloadManifestFuzz.csproj -c Release --no-build -- 70000 97531 .\out\workload *> .\out\workload\driver.log
+            "fuzz_exit=$LASTEXITCODE" | Add-Content .\out\workload\status.txt
+          } else {
+            "fuzzer_binary_missing=1" | Add-Content .\out\workload\status.txt
+          }
+          exit 0
+
+      - name: Encrypt workload results
+        if: always()
+        shell: pwsh
+        run: |
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory .\out\workload -OutputDirectory .\secure\workload -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload workload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-deep-workload-manifest
+          path: secure/workload/*.enc
+          if-no-files-found: error
+
+  tar-boundary:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 11.0.x
+
+      - name: Clone runtime
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          git clone --depth 1 https://github.com/dotnet/runtime.git source-target
+          $name = "${{ matrix.os }}".Replace("-latest","")
+          New-Item -ItemType Directory -Force -Path "out/tar-$name" | Out-Null
+          git -C source-target rev-parse HEAD | Out-File -Encoding ascii "out/tar-$name/source-sha.txt"
+
+      - name: Build source-linked tar fuzzer
+        shell: pwsh
+        run: |
+          $name = "${{ matrix.os }}".Replace("-latest","")
+          $out = "out/tar-$name"
+          & dotnet restore .\deep-fuzz\TarBoundaryFuzz\TarBoundaryFuzz.csproj --configfile .\source-target\NuGet.config -p:RestoreIgnoreFailedSources=true *> "$out/restore.log"
+          "restore_exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/status.txt"
+          if ($LASTEXITCODE -eq 0) {
+            & dotnet build .\deep-fuzz\TarBoundaryFuzz\TarBoundaryFuzz.csproj -c Release --no-restore *> "$out/build.log"
+            "build_exit=$LASTEXITCODE" | Add-Content "$out/status.txt"
+          }
+          exit 0
+
+      - name: Fuzz tar extraction boundaries
+        shell: pwsh
+        run: |
+          $name = "${{ matrix.os }}".Replace("-latest","")
+          $out = "out/tar-$name"
+          if (Test-Path .\deep-fuzz\TarBoundaryFuzz\bin\Release\net11.0\TarBoundaryFuzz.dll) {
+            & dotnet run --project .\deep-fuzz\TarBoundaryFuzz\TarBoundaryFuzz.csproj -c Release --no-build -- 8000 314159 $out *> "$out/driver.log"
+            "fuzz_exit=$LASTEXITCODE" | Add-Content "$out/status.txt"
+          } else {
+            "fuzzer_binary_missing=1" | Add-Content "$out/status.txt"
+          }
+          exit 0
+
+      - name: Encrypt tar results
+        if: always()
+        shell: pwsh
+        run: |
+          $name = "${{ matrix.os }}".Replace("-latest","")
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory "out/tar-$name" -OutputDirectory "secure/tar-$name" -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload tar results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-deep-tar-${{ matrix.os }}
+          path: secure/tar-*/**/*.enc
+          if-no-files-found: error
+
+  roslyn-malformed-pe:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone Roslyn
+        shell: pwsh
+        run: |
+          git config --global core.longpaths true
+          git clone --depth 1 https://github.com/dotnet/roslyn.git source-target
+          New-Item -ItemType Directory -Force -Path out/roslyn-pe | Out-Null
+          git -C source-target rev-parse HEAD | Out-File -Encoding ascii out/roslyn-pe/source-sha.txt
+
+      - name: Build repo csc only
+        shell: pwsh
+        run: |
+          Push-Location source-target
+          & .\eng\build.ps1 -configuration Release -ci -restore -build -msbuildEngine dotnet -solution "src/Compilers/CSharp/csc/csc.csproj" *> ..\out\roslyn-pe\build.log
+          $e=$LASTEXITCODE
+          "build_exit=$e" | Out-File -Encoding ascii ..\out\roslyn-pe\status.txt
+          Pop-Location
+          exit 0
+
+      - name: Fuzz malformed PE references
+        shell: pwsh
+        run: |
+          if (Get-ChildItem .\source-target\artifacts\bin\csc\Release -Recurse -Filter csc.dll -ErrorAction SilentlyContinue | Select-Object -First 1) {
+            & python .\deep-fuzz\roslyn_pe_fuzz.py --source .\source-target --out .\out\roslyn-pe --iterations 5000 --seed 424242 *> .\out\roslyn-pe\driver.log
+            "fuzz_exit=$LASTEXITCODE" | Add-Content .\out\roslyn-pe\status.txt
+          } else {
+            "repo_built_csc_missing=1" | Add-Content .\out\roslyn-pe\status.txt
+          }
+          exit 0
+
+      - name: Encrypt Roslyn PE results
+        if: always()
+        shell: pwsh
+        run: |
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory .\out\roslyn-pe -OutputDirectory .\secure\roslyn-pe -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload Roslyn PE results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-deep-roslyn-pe
+          path: secure/roslyn-pe/*.enc
+          if-no-files-found: error
