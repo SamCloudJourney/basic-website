@@ -43,7 +43,8 @@ jobs:
       - name: Clone source and record version
         shell: pwsh
         run: |
-          git clone --depth 1 "https://github.com/${{ matrix.repo }}.git" target
+          git config --global core.longpaths true
+          git -c core.longpaths=true clone --depth 1 "https://github.com/${{ matrix.repo }}.git" target
           $out = "out/${{ matrix.surface }}"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           git -C target rev-parse HEAD | Out-File -Encoding ascii "$out/source-sha.txt"
@@ -56,6 +57,11 @@ jobs:
           $out = "out/runtime"
           & dotnet run --project .\dotnet-fuzz\FuzzHarness\FuzzHarness.csproj -c Release -- runtime 50000 1337 $out *> "$out/driver.log"
           "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          if (Test-Path "$out/summary.txt") {
+            Get-Content "$out/summary.txt" | ForEach-Object { Write-Host ("FUZZ_SUMMARY " + $_) }
+          }
+          $candidateFiles = @(Get-ChildItem $out -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "candidate-*" }).Count
+          Write-Host ("FUZZ_CANDIDATE_FILES=" + $candidateFiles)
           exit 0
 
       - name: ASP.NET Core fuzz
@@ -65,6 +71,11 @@ jobs:
           $out = "out/aspnetcore"
           & dotnet run --project .\dotnet-fuzz\FuzzHarness\FuzzHarness.csproj -c Release -- aspnetcore 50000 7331 $out *> "$out/driver.log"
           "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          if (Test-Path "$out/summary.txt") {
+            Get-Content "$out/summary.txt" | ForEach-Object { Write-Host ("FUZZ_SUMMARY " + $_) }
+          }
+          $candidateFiles = @(Get-ChildItem $out -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "candidate-*" }).Count
+          Write-Host ("FUZZ_CANDIDATE_FILES=" + $candidateFiles)
           exit 0
 
       - name: SDK fuzz
@@ -74,6 +85,11 @@ jobs:
           $out = "out/sdk"
           & python .\dotnet-fuzz\process_fuzz.py --surface sdk --target target --out $out --iterations 400 --seed 4201 *> "$out/driver.log"
           "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          if (Test-Path "$out/summary.txt") {
+            Get-Content "$out/summary.txt" | ForEach-Object { Write-Host ("FUZZ_SUMMARY " + $_) }
+          }
+          $candidateFiles = @(Get-ChildItem $out -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "candidate-*" }).Count
+          Write-Host ("FUZZ_CANDIDATE_FILES=" + $candidateFiles)
           exit 0
 
       - name: Roslyn fuzz
@@ -83,6 +99,11 @@ jobs:
           $out = "out/roslyn"
           & python .\dotnet-fuzz\process_fuzz.py --surface roslyn --target target --out $out --iterations 700 --seed 9001 *> "$out/driver.log"
           "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          if (Test-Path "$out/summary.txt") {
+            Get-Content "$out/summary.txt" | ForEach-Object { Write-Host ("FUZZ_SUMMARY " + $_) }
+          }
+          $candidateFiles = @(Get-ChildItem $out -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "candidate-*" }).Count
+          Write-Host ("FUZZ_CANDIDATE_FILES=" + $candidateFiles)
           exit 0
 
       - name: Templating fuzz
@@ -92,6 +113,11 @@ jobs:
           $out = "out/templating"
           & python .\dotnet-fuzz\process_fuzz.py --surface templating --target target --out $out --iterations 300 --seed 5150 *> "$out/driver.log"
           "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          if (Test-Path "$out/summary.txt") {
+            Get-Content "$out/summary.txt" | ForEach-Object { Write-Host ("FUZZ_SUMMARY " + $_) }
+          }
+          $candidateFiles = @(Get-ChildItem $out -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "candidate-*" }).Count
+          Write-Host ("FUZZ_CANDIDATE_FILES=" + $candidateFiles)
           exit 0
 
       - name: Encrypt result bundle
@@ -131,7 +157,8 @@ jobs:
       - name: Clone source
         shell: pwsh
         run: |
-          git clone --depth 1 "https://github.com/${{ matrix.repo }}.git" source-target
+          git config --global core.longpaths true
+          git -c core.longpaths=true clone --depth 1 "https://github.com/${{ matrix.repo }}.git" source-target
           New-Item -ItemType Directory -Force -Path "out/native-${{ matrix.surface }}" | Out-Null
           git -C source-target rev-parse HEAD | Out-File -Encoding ascii "out/native-${{ matrix.surface }}/source-sha.txt"
 
@@ -166,13 +193,17 @@ jobs:
                 Get-ChildItem .\deployment -Directory | ForEach-Object {
                   $name = $_.Name
                   $log = Join-Path $out ("fuzz-" + $name + ".log")
-                  & (Join-Path $_.FullName "local-run.bat") "-max_total_time=45" "-timeout=10" "-rss_limit_mb=4096" *> $log
+                  $artifactPrefix = Join-Path $out ("artifact-" + $name + "-")
+                  & (Join-Path $_.FullName "local-run.bat") "-max_total_time=45" "-timeout=10" "-rss_limit_mb=4096" "-artifact_prefix=$artifactPrefix" *> $log
                   ("target=" + $name + " exit=" + $LASTEXITCODE) | Add-Content "$out/targets.txt"
+                  Write-Host ("NATIVE_TARGET " + $name + " EXIT=" + $LASTEXITCODE)
                 }
               }
             }
             Pop-Location
           }
+          $nativeArtifacts = @(Get-ChildItem $out -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "artifact-*" }).Count
+          Write-Host ("NATIVE_ARTIFACT_FILES=" + $nativeArtifacts)
           Pop-Location
           exit 0
 
@@ -198,8 +229,10 @@ jobs:
               $prepareExit = $LASTEXITCODE
               "prepare_exit=$prepareExit" | Add-Content "$out/status.txt"
               if ($prepareExit -eq 0) {
-                & .\deployment\MultipartReaderFuzzer\local-run.bat "-max_total_time=300" "-timeout=10" "-rss_limit_mb=4096" *> "$out/fuzz-MultipartReaderFuzzer.log"
+                $artifactPrefix = Join-Path $out "artifact-MultipartReaderFuzzer-"
+                & .\deployment\MultipartReaderFuzzer\local-run.bat "-max_total_time=300" "-timeout=10" "-rss_limit_mb=4096" "-artifact_prefix=$artifactPrefix" *> "$out/fuzz-MultipartReaderFuzzer.log"
                 "target=MultipartReaderFuzzer exit=$LASTEXITCODE" | Add-Content "$out/targets.txt"
+                Write-Host ("NATIVE_TARGET MultipartReaderFuzzer EXIT=" + $LASTEXITCODE)
               }
             }
             Pop-Location
