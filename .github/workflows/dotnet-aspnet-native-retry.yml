@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: aspnet-source-native-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   aspnet-source-fuzz:
     runs-on: windows-latest
@@ -36,7 +40,7 @@ jobs:
         shell: pwsh
         run: |
           Push-Location source-target
-          & .\eng\build.ps1 -Restore -BuildManaged -NoBuildNative -NoBuildNodeJS -NoBuildJava -NoBuildInstallers -Configuration Release -Projects "$(Resolve-Path .\src\Fuzzing\AspNetCoreFuzzing\AspNetCoreFuzzing.csproj)" *> ..\out\managed-build.log
+          & .\eng\build.ps1 -Restore -NoBuildNative -NoBuildJava -NoBuildInstallers -Configuration Release -Projects "$(Resolve-Path .\src\Fuzzing\AspNetCoreFuzzing\AspNetCoreFuzzing.csproj)" *> ..\out\managed-build.log
           $buildExit = $LASTEXITCODE
           "build_exit=$buildExit" | Out-File -Encoding ascii ..\out\status.txt
           if ($buildExit -eq 0) {
