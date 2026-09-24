@@ -122,9 +122,9 @@ static std::vector<uint8_t> ser_df(const damgard_fujisaki_public_t* pub) {
     return v;
 }
 static std::vector<uint8_t> ser_pc(const paillier_commitment_public_key_t* pub) {
-    uint32_t n=0; paillier_commitment_public_key_serialize(pub,0,nullptr,0,&n);
+    uint32_t n=0; paillier_commitment_public_key_serialize(pub,1,nullptr,0,&n);
     std::vector<uint8_t> v(n); uint32_t a=0;
-    if (paillier_commitment_public_key_serialize(pub,0,v.data(),n,&a)!=PAILLIER_SUCCESS || a!=n) throw std::runtime_error("pc serialize");
+    if (paillier_commitment_public_key_serialize(pub,1,v.data(),n,&a)!=PAILLIER_SUCCESS || a!=n) throw std::runtime_error("pc serialize");
     return v;
 }
 static std::vector<uint8_t> blum_pc(const paillier_commitment_private_key_t* priv, const std::vector<uint8_t>& aad) {
@@ -191,9 +191,13 @@ int main(int argc,char**argv) {
         auto m=mutate(r,rseed); ++s.ring_cases;
         auto* x=ring_pedersen_public_deserialize(m.data(),static_cast<uint32_t>(m.size()));
         if(x){++s.ring_accepted;
-            auto canonical = ser_ring(x);
-            if(canonical != rseed && ring_pedersen_parameters_zkp_verify(x,aad.data(),aad.size(),rproof.data(),rproof.size())==ZKP_SUCCESS){
-                ++s.ring_original_proof_accepts; candidate(out,++cid,"ring-different-key-original-proof",rseed,m);
+            if(ring_pedersen_parameters_zkp_verify(x,aad.data(),aad.size(),rproof.data(),rproof.size())==ZKP_SUCCESS){
+                try {
+                    auto canonical = ser_ring(x);
+                    if(canonical != rseed){ ++s.ring_original_proof_accepts; candidate(out,++cid,"ring-different-key-original-proof",rseed,m); }
+                } catch (...) {
+                    ++s.ring_original_proof_accepts; candidate(out,++cid,"ring-proof-valid-nonserializable-key",rseed,m);
+                }
             }
             ring_pedersen_free_public(x);
         }
@@ -202,20 +206,28 @@ int main(int argc,char**argv) {
         auto m=mutate(r,dseed); ++s.df_cases;
         auto* x=damgard_fujisaki_public_deserialize(m.data(),static_cast<uint32_t>(m.size()));
         if(x){++s.df_accepted;
-            auto canonical = ser_df(x);
-            if(canonical != dseed && damgard_fujisaki_parameters_zkp_verify(x,aad.data(),aad.size(),40,dproof.data(),dproof.size())==ZKP_SUCCESS){
-                ++s.df_original_proof_accepts; candidate(out,++cid,"df-different-key-original-proof",dseed,m);
+            if(damgard_fujisaki_parameters_zkp_verify(x,aad.data(),aad.size(),40,dproof.data(),dproof.size())==ZKP_SUCCESS){
+                try {
+                    auto canonical = ser_df(x);
+                    if(canonical != dseed){ ++s.df_original_proof_accepts; candidate(out,++cid,"df-different-key-original-proof",dseed,m); }
+                } catch (...) {
+                    ++s.df_original_proof_accepts; candidate(out,++cid,"df-proof-valid-nonserializable-key",dseed,m);
+                }
             }
             damgard_fujisaki_free_public(x);
         }
     }
     for(uint64_t i=0;i<n;++i) {
         auto m=mutate(r,pcseed); ++s.pc_cases;
-        auto* x=paillier_commitment_public_key_deserialize(0,m.data(),static_cast<uint32_t>(m.size()));
+        auto* x=paillier_commitment_public_key_deserialize(1,m.data(),static_cast<uint32_t>(m.size()));
         if(x){++s.pc_accepted;
-            auto canonical = ser_pc(x);
-            if(canonical != pcseed && paillier_commitment_paillier_blum_zkp_verify(x,aad.data(),aad.size(),pcproof.data(),pcproof.size())==PAILLIER_SUCCESS){
-                ++s.pc_original_blum_accepts; candidate(out,++cid,"pc-different-key-original-proof",pcseed,m);
+            if(paillier_commitment_paillier_blum_zkp_verify(x,aad.data(),aad.size(),pcproof.data(),pcproof.size())==PAILLIER_SUCCESS){
+                try {
+                    auto canonical = ser_pc(x);
+                    if(canonical != pcseed){ ++s.pc_original_blum_accepts; candidate(out,++cid,"pc-reduced-different-key-original-proof",pcseed,m); }
+                } catch (...) {
+                    ++s.pc_original_blum_accepts; candidate(out,++cid,"pc-reduced-proof-valid-nonserializable-key",pcseed,m);
+                }
             }
             paillier_commitment_free_public_key(x);
         }
