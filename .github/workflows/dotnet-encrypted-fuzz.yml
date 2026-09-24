@@ -1,0 +1,226 @@
+name: Encrypted .NET Five-Repo Fuzz
+
+on:
+  push:
+    branches:
+      - dotnet-fuzz-public-run-20260924
+    paths:
+      - "dotnet-fuzz/**"
+      - ".github/workflows/dotnet-encrypted-fuzz.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  broad:
+    name: broad-${{ matrix.surface }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - surface: runtime
+            repo: dotnet/runtime
+          - surface: aspnetcore
+            repo: dotnet/aspnetcore
+          - surface: sdk
+            repo: dotnet/sdk
+          - surface: roslyn
+            repo: dotnet/roslyn
+          - surface: templating
+            repo: dotnet/templating
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@v4
+
+      - name: Install .NET 10.0.401
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.401
+
+      - name: Clone source and record version
+        shell: pwsh
+        run: |
+          git clone --depth 1 "https://github.com/${{ matrix.repo }}.git" target
+          $out = "out/${{ matrix.surface }}"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          git -C target rev-parse HEAD | Out-File -Encoding ascii "$out/source-sha.txt"
+          dotnet --info | Out-File -Encoding utf8 "$out/dotnet-info.txt"
+
+      - name: Runtime fuzz
+        if: matrix.surface == 'runtime'
+        shell: pwsh
+        run: |
+          $out = "out/runtime"
+          & dotnet run --project .\dotnet-fuzz\FuzzHarness\FuzzHarness.csproj -c Release -- runtime 50000 1337 $out *> "$out/driver.log"
+          "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          exit 0
+
+      - name: ASP.NET Core fuzz
+        if: matrix.surface == 'aspnetcore'
+        shell: pwsh
+        run: |
+          $out = "out/aspnetcore"
+          & dotnet run --project .\dotnet-fuzz\FuzzHarness\FuzzHarness.csproj -c Release -- aspnetcore 50000 7331 $out *> "$out/driver.log"
+          "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          exit 0
+
+      - name: SDK fuzz
+        if: matrix.surface == 'sdk'
+        shell: pwsh
+        run: |
+          $out = "out/sdk"
+          & python .\dotnet-fuzz\process_fuzz.py --surface sdk --target target --out $out --iterations 400 --seed 4201 *> "$out/driver.log"
+          "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          exit 0
+
+      - name: Roslyn fuzz
+        if: matrix.surface == 'roslyn'
+        shell: pwsh
+        run: |
+          $out = "out/roslyn"
+          & python .\dotnet-fuzz\process_fuzz.py --surface roslyn --target target --out $out --iterations 700 --seed 9001 *> "$out/driver.log"
+          "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          exit 0
+
+      - name: Templating fuzz
+        if: matrix.surface == 'templating'
+        shell: pwsh
+        run: |
+          $out = "out/templating"
+          & python .\dotnet-fuzz\process_fuzz.py --surface templating --target target --out $out --iterations 300 --seed 5150 *> "$out/driver.log"
+          "exit=$LASTEXITCODE" | Out-File -Encoding ascii "$out/driver-exit.txt"
+          exit 0
+
+      - name: Encrypt result bundle
+        if: always()
+        shell: pwsh
+        run: |
+          $surface = "${{ matrix.surface }}"
+          $input = "out/$surface"
+          New-Item -ItemType Directory -Force -Path $input | Out-Null
+          $secure = "secure/$surface"
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory $input -OutputDirectory $secure -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload encrypted bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-dotnet-fuzz-${{ matrix.surface }}
+          path: secure/${{ matrix.surface }}/*.enc
+          if-no-files-found: error
+
+  source-native:
+    name: native-${{ matrix.surface }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - surface: runtime
+            repo: dotnet/runtime
+          - surface: aspnetcore
+            repo: dotnet/aspnetcore
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@v4
+
+      - name: Clone source
+        shell: pwsh
+        run: |
+          git clone --depth 1 "https://github.com/${{ matrix.repo }}.git" source-target
+          New-Item -ItemType Directory -Force -Path "out/native-${{ matrix.surface }}" | Out-Null
+          git -C source-target rev-parse HEAD | Out-File -Encoding ascii "out/native-${{ matrix.surface }}/source-sha.txt"
+
+      - name: Install SDKs used by fuzz tooling
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            9.0.x
+            10.0.x
+
+      - name: Build and coverage-fuzz runtime official targets
+        if: matrix.surface == 'runtime'
+        shell: pwsh
+        run: |
+          $out = Resolve-Path "out/native-runtime"
+          Push-Location source-target
+          & .\build.cmd clr+libs -rc Checked -c Debug *> "$out/build.log"
+          $buildExit = $LASTEXITCODE
+          "build_exit=$buildExit" | Out-File -Encoding ascii "$out/status.txt"
+          if ($buildExit -eq 0) {
+            Push-Location src\libraries\Fuzzing\DotnetFuzzing
+            & ..\..\..\..\.dotnet\dotnet.exe build-server shutdown *> "$out/build-server.log"
+            & ..\..\..\..\.dotnet\dotnet.exe build *> "$out/fuzzer-build.log"
+            $fuzzBuildExit = $LASTEXITCODE
+            "fuzzer_build_exit=$fuzzBuildExit" | Add-Content "$out/status.txt"
+            if ($fuzzBuildExit -eq 0) {
+              & ..\..\..\..\.dotnet\dotnet.exe tool install --tool-path . SharpFuzz.CommandLine *> "$out/sharpfuzz-install.log"
+              & .\run.bat *> "$out/prepare.log"
+              $prepareExit = $LASTEXITCODE
+              "prepare_exit=$prepareExit" | Add-Content "$out/status.txt"
+              if ($prepareExit -eq 0) {
+                Get-ChildItem .\deployment -Directory | ForEach-Object {
+                  $name = $_.Name
+                  $log = Join-Path $out ("fuzz-" + $name + ".log")
+                  & (Join-Path $_.FullName "local-run.bat") "-max_total_time=45" "-timeout=10" "-rss_limit_mb=4096" *> $log
+                  ("target=" + $name + " exit=" + $LASTEXITCODE) | Add-Content "$out/targets.txt"
+                }
+              }
+            }
+            Pop-Location
+          }
+          Pop-Location
+          exit 0
+
+      - name: Build and coverage-fuzz ASP.NET Core official target
+        if: matrix.surface == 'aspnetcore'
+        shell: pwsh
+        run: |
+          $out = Resolve-Path "out/native-aspnetcore"
+          Push-Location source-target
+          & .\eng\build.cmd *> "$out/build.log"
+          $buildExit = $LASTEXITCODE
+          "build_exit=$buildExit" | Out-File -Encoding ascii "$out/status.txt"
+          if ($buildExit -eq 0) {
+            . .\activate.ps1
+            Push-Location src\Fuzzing\AspNetCoreFuzzing
+            & dotnet build-server shutdown *> "$out/build-server.log"
+            & dotnet build -c Release *> "$out/fuzzer-build.log"
+            $fuzzBuildExit = $LASTEXITCODE
+            "fuzzer_build_exit=$fuzzBuildExit" | Add-Content "$out/status.txt"
+            if ($fuzzBuildExit -eq 0) {
+              & dotnet tool install --tool-path . SharpFuzz.CommandLine --version 2.3.0 *> "$out/sharpfuzz-install.log"
+              & .\run.bat *> "$out/prepare.log"
+              $prepareExit = $LASTEXITCODE
+              "prepare_exit=$prepareExit" | Add-Content "$out/status.txt"
+              if ($prepareExit -eq 0) {
+                & .\deployment\MultipartReaderFuzzer\local-run.bat "-max_total_time=300" "-timeout=10" "-rss_limit_mb=4096" *> "$out/fuzz-MultipartReaderFuzzer.log"
+                "target=MultipartReaderFuzzer exit=$LASTEXITCODE" | Add-Content "$out/targets.txt"
+              }
+            }
+            Pop-Location
+          }
+          Pop-Location
+          exit 0
+
+      - name: Encrypt native result bundle
+        if: always()
+        shell: pwsh
+        run: |
+          $surface = "${{ matrix.surface }}"
+          $input = "out/native-$surface"
+          New-Item -ItemType Directory -Force -Path $input | Out-Null
+          $secure = "secure/native-$surface"
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory $input -OutputDirectory $secure -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload encrypted native bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-dotnet-native-${{ matrix.surface }}
+          path: secure/native-${{ matrix.surface }}/*.enc
+          if-no-files-found: error
