@@ -1,0 +1,158 @@
+name: Fireblocks MPC Deep Hunt
+
+on:
+  push:
+    branches:
+      - fireblocks-mpc-hunt-20260924
+    paths:
+      - "fireblocks-hunt/**"
+      - ".github/workflows/fireblocks-mpc-hunt.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fireblocks-mpc-hunt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  baseline-and-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y build-essential cmake pkg-config uuid-dev libssl-dev >/dev/null
+
+      - name: Clone exact Fireblocks MPC revision
+        run: |
+          git clone https://github.com/fireblocks/mpc-lib.git target >/dev/null 2>&1
+          git -C target checkout 00ae08b7f1bdbb887aedece384aca2f942aae432 >/dev/null 2>&1
+          mkdir -p out/baseline out/oracle
+          git -C target rev-parse HEAD > out/baseline/source-sha.txt
+
+      - name: Build official tree
+        run: |
+          set +e
+          cmake -S target -B build-official -DCMAKE_BUILD_TYPE=Debug > out/baseline/configure.log 2>&1
+          echo "configure_exit=$?" > out/baseline/status.txt
+          cmake --build build-official -j 2 > out/baseline/build.log 2>&1
+          echo "build_exit=$?" >> out/baseline/status.txt
+          (cd build-official && ctest --output-on-failure) > out/baseline/ctest.log 2>&1
+          echo "ctest_exit=$?" >> out/baseline/status.txt
+          set -e
+
+      - name: Build cryptographic mutation oracle
+        run: |
+          set +e
+          cmake -S fireblocks-hunt -B build-oracle -DMPC_SOURCE="$PWD/target" -DCMAKE_BUILD_TYPE=Release > out/oracle/configure.log 2>&1
+          echo "configure_exit=$?" > out/oracle/status.txt
+          cmake --build build-oracle --target protocol_mutator -j 2 > out/oracle/build.log 2>&1
+          echo "build_exit=$?" >> out/oracle/status.txt
+          if [ -x build-oracle/protocol_mutator ]; then
+            build-oracle/protocol_mutator 12000 5063812098668826435 out/oracle/candidates > out/oracle/driver.log 2>&1
+            echo "fuzz_exit=$?" >> out/oracle/status.txt
+          else
+            echo "binary_missing=1" >> out/oracle/status.txt
+          fi
+          set -e
+
+      - name: Encrypt baseline and oracle results
+        if: always()
+        run: |
+          chmod +x fireblocks-hunt/encrypt.sh
+          fireblocks-hunt/encrypt.sh out secure fireblocks-hunt/public.pem
+
+      - name: Upload encrypted results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-fireblocks-baseline-oracle
+          path: |
+            secure/results.tar.gz.enc
+            secure/key.bin.enc
+            secure/iv.hex
+          if-no-files-found: error
+
+  sanitizer-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y build-essential clang cmake pkg-config uuid-dev libssl-dev >/dev/null
+
+      - name: Clone exact Fireblocks MPC revision
+        run: |
+          git clone https://github.com/fireblocks/mpc-lib.git target >/dev/null 2>&1
+          git -C target checkout 00ae08b7f1bdbb887aedece384aca2f942aae432 >/dev/null 2>&1
+          mkdir -p out/sanitizer
+          git -C target rev-parse HEAD > out/sanitizer/source-sha.txt
+
+      - name: Build official tests with ASAN and UBSAN
+        env:
+          CC: clang
+          CXX: clang++
+          CFLAGS: -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          CXXFLAGS: -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          LDFLAGS: -fsanitize=address,undefined
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:symbolize=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          set +e
+          cmake -S target -B build-san -DCMAKE_BUILD_TYPE=Debug > out/sanitizer/configure.log 2>&1
+          echo "configure_exit=$?" > out/sanitizer/status.txt
+          cmake --build build-san -j 2 > out/sanitizer/build.log 2>&1
+          echo "build_exit=$?" >> out/sanitizer/status.txt
+          (cd build-san && ctest --output-on-failure) > out/sanitizer/ctest.log 2>&1
+          echo "ctest_exit=$?" >> out/sanitizer/status.txt
+          set -e
+
+      - name: Build and run mutation oracle with sanitizers
+        env:
+          CC: clang
+          CXX: clang++
+          CFLAGS: -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          CXXFLAGS: -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          LDFLAGS: -fsanitize=address,undefined
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:symbolize=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          set +e
+          cmake -S fireblocks-hunt -B build-oracle-san -DMPC_SOURCE="$PWD/target" -DCMAKE_BUILD_TYPE=Debug > out/sanitizer/oracle-configure.log 2>&1
+          echo "oracle_configure_exit=$?" >> out/sanitizer/status.txt
+          cmake --build build-oracle-san --target protocol_mutator -j 2 > out/sanitizer/oracle-build.log 2>&1
+          echo "oracle_build_exit=$?" >> out/sanitizer/status.txt
+          if [ -x build-oracle-san/protocol_mutator ]; then
+            build-oracle-san/protocol_mutator 6000 117979518330473 out/sanitizer/candidates > out/sanitizer/oracle-driver.log 2>&1
+            echo "oracle_exit=$?" >> out/sanitizer/status.txt
+          else
+            echo "oracle_binary_missing=1" >> out/sanitizer/status.txt
+          fi
+          set -e
+
+      - name: Encrypt sanitizer results
+        if: always()
+        run: |
+          chmod +x fireblocks-hunt/encrypt.sh
+          fireblocks-hunt/encrypt.sh out secure fireblocks-hunt/public.pem
+
+      - name: Upload encrypted sanitizer results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-fireblocks-sanitizer
+          path: |
+            secure/results.tar.gz.enc
+            secure/key.bin.enc
+            secure/iv.hex
+          if-no-files-found: error
