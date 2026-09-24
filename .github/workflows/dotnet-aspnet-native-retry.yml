@@ -1,0 +1,74 @@
+name: ASP.NET Core Source-Native Fuzz Retry
+
+on:
+  push:
+    branches:
+      - dotnet-fuzz-public-run-20260924
+    paths:
+      - ".github/workflows/dotnet-aspnet-native-retry.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aspnet-source-fuzz:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout controller
+        uses: actions/checkout@v4
+
+      - name: Clone ASP.NET Core source
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/dotnet/aspnetcore.git source-target
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          git -C source-target rev-parse HEAD | Out-File -Encoding ascii out/source-sha.txt
+
+      - name: Install fuzz CLI runtime
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.x
+
+      - name: Build only managed fuzz project from source
+        shell: pwsh
+        run: |
+          Push-Location source-target
+          & .\eng\build.ps1 -Restore -BuildManaged -NoBuildNative -NoBuildNodeJS -NoBuildJava -NoBuildInstallers -Configuration Release -Projects "$(Resolve-Path .\src\Fuzzing\AspNetCoreFuzzing\AspNetCoreFuzzing.csproj)" *> ..\out\managed-build.log
+          $buildExit = $LASTEXITCODE
+          "build_exit=$buildExit" | Out-File -Encoding ascii ..\out\status.txt
+          if ($buildExit -eq 0) {
+            . .\activate.ps1
+            Push-Location src\Fuzzing\AspNetCoreFuzzing
+            & dotnet tool install --tool-path . SharpFuzz.CommandLine --version 2.3.0 *> ..\..\..\..\out\sharpfuzz-install.log
+            & .\run.bat *> ..\..\..\..\out\prepare.log
+            $prepareExit = $LASTEXITCODE
+            "prepare_exit=$prepareExit" | Add-Content ..\..\..\..\out\status.txt
+            if ($prepareExit -eq 0) {
+              & .\deployment\MultipartReaderFuzzer\local-run.bat "-max_total_time=300" "-timeout=10" "-rss_limit_mb=4096" *> ..\..\..\..\out\fuzz-MultipartReaderFuzzer.log
+              "fuzz_exit=$LASTEXITCODE" | Add-Content ..\..\..\..\out\status.txt
+              Get-ChildItem .\deployment\MultipartReaderFuzzer -File | Where-Object { $_.Name -match '^(crash|timeout|oom|leak)-' } | ForEach-Object {
+                Copy-Item $_.FullName ..\..\..\..\out\
+              }
+            }
+            Pop-Location
+          }
+          Pop-Location
+          exit 0
+
+      - name: Encrypt results
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          .\dotnet-fuzz\encrypt.ps1 -InputDirectory out -OutputDirectory secure -PublicKeyPath .\dotnet-fuzz\public.pem
+
+      - name: Upload encrypted results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-aspnet-source-native-retry
+          path: secure/*.enc
+          if-no-files-found: error
