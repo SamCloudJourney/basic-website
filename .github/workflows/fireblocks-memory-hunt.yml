@@ -49,6 +49,10 @@ jobs:
           if [ -x build-no-align/parser_mutator ]; then
             build-no-align/parser_mutator 20000 9988776655 out/no-align/candidates > out/no-align/driver.log 2>&1
             echo "fuzz_exit=$?" >> out/no-align/status.txt
+            echo "=== SAFE NO-ALIGN SUMMARY ==="
+            cat out/no-align/candidates/summary.txt || true
+            cat out/no-align/status.txt || true
+            if grep -R -E "ERROR: AddressSanitizer|runtime error:|UndefinedBehaviorSanitizer|LeakSanitizer" out/no-align/*.log out/no-align/driver.log 2>/dev/null; then echo "sanitizer_signal=1"; else echo "sanitizer_signal=0"; fi
           else
             echo "binary_missing=1" >> out/no-align/status.txt
           fi
@@ -93,6 +97,9 @@ jobs:
           if [ -x build-arm/parser_mutator ]; then
             build-arm/parser_mutator 12000 9988776656 out/arm64/candidates > out/arm64/driver.log 2>&1
             echo "fuzz_exit=$?" >> out/arm64/status.txt
+            echo "=== SAFE ARM64 SUMMARY ==="
+            cat out/arm64/candidates/summary.txt || true
+            cat out/arm64/status.txt || true
           else
             echo "binary_missing=1" >> out/arm64/status.txt
           fi
