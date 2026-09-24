@@ -1,3 +1,4 @@
+#include <random>
 
 // ============================================================
 // Autonomous bounty research: FROST peer-message mutation oracle
@@ -47,11 +48,11 @@ TEST_CASE("frost_peer_message_mutation_hunt")
     auto random_valid_point = [&]()
     {
         elliptic_curve256_scalar_t k;
-        elliptic_curve256_point_t p;
+        fbc::elliptic_curve_point p;
         REQUIRE(algebra->rand(algebra.get(), &k) == ELLIPTIC_CURVE_ALGEBRA_SUCCESS);
-        REQUIRE(algebra->generator_mul(algebra.get(), &p, &k) == ELLIPTIC_CURVE_ALGEBRA_SUCCESS);
+        REQUIRE(algebra->generator_mul(algebra.get(), &p.data, &k) == ELLIPTIC_CURVE_ALGEBRA_SUCCESS);
         OPENSSL_cleanse(k, sizeof(k));
-        return fbc::elliptic_curve_point(p);
+        return p;
     };
 
     // Malicious-client mutations: server created a legitimate session, client
