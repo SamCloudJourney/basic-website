@@ -1,0 +1,124 @@
+name: Fireblocks MPC Peer Parser Hunt
+
+on:
+  push:
+    branches:
+      - fireblocks-mpc-hunt-20260924
+    paths:
+      - "fireblocks-parser/**"
+      - ".github/workflows/fireblocks-parser-hunt.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fireblocks-parser-hunt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y build-essential cmake pkg-config uuid-dev libssl-dev >/dev/null
+
+      - name: Clone exact Fireblocks MPC revision
+        run: |
+          git clone https://github.com/fireblocks/mpc-lib.git target >/dev/null 2>&1
+          git -C target checkout 00ae08b7f1bdbb887aedece384aca2f942aae432 >/dev/null 2>&1
+          mkdir -p out/release
+          git -C target rev-parse HEAD > out/release/source-sha.txt
+
+      - name: Build parser oracle
+        run: |
+          set +e
+          cmake -S fireblocks-parser -B build-parser -DMPC_SOURCE="$PWD/target" -DCMAKE_BUILD_TYPE=Release > out/release/configure.log 2>&1
+          echo "configure_exit=$?" > out/release/status.txt
+          cmake --build build-parser --target parser_mutator -j 2 > out/release/build.log 2>&1
+          echo "build_exit=$?" >> out/release/status.txt
+          if [ -x build-parser/parser_mutator ]; then
+            build-parser/parser_mutator 12000 882369217 out/release/candidates > out/release/driver.log 2>&1
+            echo "fuzz_exit=$?" >> out/release/status.txt
+          else
+            echo "binary_missing=1" >> out/release/status.txt
+          fi
+          set -e
+
+      - name: Encrypt results
+        if: always()
+        run: |
+          chmod +x fireblocks-hunt/encrypt.sh
+          fireblocks-hunt/encrypt.sh out secure fireblocks-hunt/public.pem
+
+      - name: Upload encrypted results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-fireblocks-parser-release
+          path: |
+            secure/results.tar.gz.enc
+            secure/key.bin.enc
+            secure/iv.hex
+          if-no-files-found: error
+
+  sanitizer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y build-essential clang cmake pkg-config uuid-dev libssl-dev >/dev/null
+
+      - name: Clone exact Fireblocks MPC revision
+        run: |
+          git clone https://github.com/fireblocks/mpc-lib.git target >/dev/null 2>&1
+          git -C target checkout 00ae08b7f1bdbb887aedece384aca2f942aae432 >/dev/null 2>&1
+          mkdir -p out/sanitizer
+          git -C target rev-parse HEAD > out/sanitizer/source-sha.txt
+
+      - name: Build and fuzz parsers with ASAN/UBSAN
+        env:
+          CC: clang
+          CXX: clang++
+          CFLAGS: -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          CXXFLAGS: -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer
+          LDFLAGS: -fsanitize=address,undefined
+          ASAN_OPTIONS: detect_leaks=1:abort_on_error=1:symbolize=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          set +e
+          cmake -S fireblocks-parser -B build-parser-san -DMPC_SOURCE="$PWD/target" -DCMAKE_BUILD_TYPE=RelWithDebInfo > out/sanitizer/configure.log 2>&1
+          echo "configure_exit=$?" > out/sanitizer/status.txt
+          cmake --build build-parser-san --target parser_mutator -j 2 > out/sanitizer/build.log 2>&1
+          echo "build_exit=$?" >> out/sanitizer/status.txt
+          if [ -x build-parser-san/parser_mutator ]; then
+            build-parser-san/parser_mutator 8000 882369218 out/sanitizer/candidates > out/sanitizer/driver.log 2>&1
+            echo "fuzz_exit=$?" >> out/sanitizer/status.txt
+          else
+            echo "binary_missing=1" >> out/sanitizer/status.txt
+          fi
+          set -e
+
+      - name: Encrypt sanitizer results
+        if: always()
+        run: |
+          chmod +x fireblocks-hunt/encrypt.sh
+          fireblocks-hunt/encrypt.sh out secure fireblocks-hunt/public.pem
+
+      - name: Upload encrypted sanitizer results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-fireblocks-parser-sanitizer
+          path: |
+            secure/results.tar.gz.enc
+            secure/key.bin.enc
+            secure/iv.hex
+          if-no-files-found: error
