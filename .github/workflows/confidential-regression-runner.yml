@@ -16,7 +16,7 @@ jobs:
     steps:
       - name: Prepare source and dispatcher
         run: |
-          git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/aspnetcore.git aspnetcore
+          git clone --depth 1 --branch release/11.0 https://github.com/dotnet/aspnetcore.git aspnetcore
           git clone --depth 1 --branch "$GITHUB_REF_NAME" "https://github.com/$GITHUB_REPOSITORY.git" dispatcher
           git -C aspnetcore rev-parse HEAD
           mkdir -p confidential-runtime
