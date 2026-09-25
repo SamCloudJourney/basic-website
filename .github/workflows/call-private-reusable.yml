@@ -1,0 +1,9 @@
+name: call-private-reusable
+on:
+  push:
+    branches:
+      - actions-runner-smoke-20260925
+
+jobs:
+  call-private:
+    uses: SamCloudJourney/native-path-lab-20260830/.github/workflows/private-reusable-smoke.yml@dotnet-bounty-ci-20260925
