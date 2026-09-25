@@ -81,3 +81,30 @@ jobs:
           path: ${{ runner.temp }}/dotnet-10.0.401-linux-x64.tgz
           retention-days: 1
           compression-level: 0
+
+
+  bundle-dotnet-matrix-overlay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Bundle older SDKs and .NET 9 runtime packs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC=/usr/share/dotnet
+          OUT="$RUNNER_TEMP/dotnet-matrix-overlay"
+          mkdir -p "$OUT"/{sdk,shared/Microsoft.NETCore.App,packs/Microsoft.NETCore.App.Ref,packs/Microsoft.AspNetCore.App.Ref,packs/Microsoft.NETCore.App.Host.linux-x64}
+          cp -a "$SRC/sdk/10.0.303" "$OUT/sdk/"
+          cp -a "$SRC/sdk/9.0.318" "$OUT/sdk/"
+          cp -a "$SRC/shared/Microsoft.NETCore.App/9.0.20" "$OUT/shared/Microsoft.NETCore.App/"
+          cp -a "$SRC/packs/Microsoft.NETCore.App.Ref/9.0.20" "$OUT/packs/Microsoft.NETCore.App.Ref/"
+          cp -a "$SRC/packs/Microsoft.AspNetCore.App.Ref/9.0.20" "$OUT/packs/Microsoft.AspNetCore.App.Ref/"
+          cp -a "$SRC/packs/Microsoft.NETCore.App.Host.linux-x64/9.0.20" "$OUT/packs/Microsoft.NETCore.App.Host.linux-x64/"
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/dotnet-sdk-matrix-overlay.tgz" dotnet-matrix-overlay
+
+      - name: Upload SDK matrix overlay
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-sdk-matrix-overlay
+          path: ${{ runner.temp }}/dotnet-sdk-matrix-overlay.tgz
+          retention-days: 1
+          compression-level: 0
