@@ -24,7 +24,16 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           path = Path("aspnetcore/src/DefaultBuilder/test/Microsoft.AspNetCore.Tests/CsrfProtectionIntegrationTests.cs")
+          project_path = Path("aspnetcore/src/DefaultBuilder/test/Microsoft.AspNetCore.Tests/Microsoft.AspNetCore.Tests.csproj")
           text = path.read_text()
+          project_text = project_path.read_text()
+          if "Microsoft.AspNetCore.Authentication.Cookies" not in project_text:
+              anchor = '    <Reference Include="Microsoft.AspNetCore.Authentication.Core" />\\n'
+              if anchor not in project_text:
+                  raise SystemExit("cookie reference anchor not found")
+              project_path.write_text(project_text.replace(
+                  anchor,
+                  anchor + '    <Reference Include="Microsoft.AspNetCore.Authentication.Cookies" />\\n'))
           marker = "    [Fact]\n    public async Task CsrfProtection_UseStatusCodePagesWithReExecute_CsrfMarkerStampedOnReroutedRequest()"
           if marker not in text:
               raise SystemExit("marker not found")
@@ -63,7 +72,7 @@ jobs:
                   {
                       var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "victim")], "Test");
                       await context.SignInAsync("Test", new ClaimsPrincipal(identity));
-                      return Results.Ok();
+                      context.Response.StatusCode = StatusCodes.Status200OK;
                   });
 
                   if (inlineMiddlewarePolicy)
