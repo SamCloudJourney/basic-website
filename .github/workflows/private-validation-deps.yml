@@ -1,0 +1,94 @@
+name: Private Validation Dependencies
+
+on:
+  push:
+    branches:
+      - actions-infra-probe-20260925
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bundle-dotnet11-rc1-minimal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install exact .NET 11 RC1
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100-rc.1.26425.128'
+
+      - name: Build minimal portable Web SDK bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DOTNET_REAL="$(readlink -f "$(command -v dotnet)")"
+          SRC="$(dirname "$DOTNET_REAL")"
+          dotnet --info
+
+          OUT="$RUNNER_TEMP/dotnet11-min"
+          mkdir -p "$OUT/host/fxr" "$OUT/sdk" "$OUT/shared/Microsoft.NETCore.App" "$OUT/shared/Microsoft.AspNetCore.App" "$OUT/packs"
+
+          cp "$SRC/dotnet" "$OUT/dotnet"
+          SDK_VER=11.0.100-rc.1.26425.128
+          cp -a "$SRC/sdk/$SDK_VER" "$OUT/sdk/"
+
+          FXR="$(find "$SRC/host/fxr" -mindepth 1 -maxdepth 1 -type d -name '11.0.*' | sort -V | tail -1)"
+          CORE="$(find "$SRC/shared/Microsoft.NETCore.App" -mindepth 1 -maxdepth 1 -type d -name '11.0.*' | sort -V | tail -1)"
+          ASP="$(find "$SRC/shared/Microsoft.AspNetCore.App" -mindepth 1 -maxdepth 1 -type d -name '11.0.*' | sort -V | tail -1)"
+          cp -a "$FXR" "$OUT/host/fxr/"
+          cp -a "$CORE" "$OUT/shared/Microsoft.NETCore.App/"
+          cp -a "$ASP" "$OUT/shared/Microsoft.AspNetCore.App/"
+
+          for pack in Microsoft.NETCore.App.Ref Microsoft.AspNetCore.App.Ref Microsoft.NETCore.App.Host.linux-x64 NETStandard.Library.Ref; do
+            if [ -d "$SRC/packs/$pack" ]; then
+              mkdir -p "$OUT/packs/$pack"
+              if [[ "$pack" == NETStandard.Library.Ref ]]; then
+                latest="$(find "$SRC/packs/$pack" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+              else
+                latest="$(find "$SRC/packs/$pack" -mindepth 1 -maxdepth 1 -type d -name '11.0.*' | sort -V | tail -1)"
+              fi
+              test -n "$latest"
+              cp -a "$latest" "$OUT/packs/$pack/"
+            fi
+          done
+
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/dotnet11-rc1-minimal.tgz" dotnet11-min
+
+      - name: Validate static ASP.NET Core build
+        shell: bash
+        run: |
+          set -euxo pipefail
+          TEST="$RUNNER_TEMP/testroot"
+          mkdir -p "$TEST"
+          tar -C "$TEST" -xzf "$RUNNER_TEMP/dotnet11-rc1-minimal.tgz"
+          export DOTNET_ROOT="$TEST/dotnet11-min"
+          export DOTNET_MULTILEVEL_LOOKUP=0
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet --info
+
+          mkdir -p "$RUNNER_TEMP/webcheck"
+          cd "$RUNNER_TEMP/webcheck"
+          cat > webcheck.csproj <<'EOF'
+          <Project Sdk="Microsoft.NET.Sdk.Web">
+            <PropertyGroup>
+              <TargetFramework>net11.0</TargetFramework>
+            </PropertyGroup>
+          </Project>
+          EOF
+          cat > Program.cs <<'EOF'
+          var b = WebApplication.CreateBuilder(args);
+          b.Services.AddRazorComponents();
+          var app = b.Build();
+          app.MapGet("/", () => "RC1_WEB_OK");
+          app.Run();
+          EOF
+          dotnet build webcheck.csproj -c Release --no-restore || dotnet build webcheck.csproj -c Release
+
+      - name: Upload minimal RC1 toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet11-rc1-minimal
+          path: ${{ runner.temp }}/dotnet11-rc1-minimal.tgz
+          retention-days: 1
+          compression-level: 0
