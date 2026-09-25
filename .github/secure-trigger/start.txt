@@ -1,1 +1,1 @@
-secure-dotnet-probes-20260925-v6
+registry-auth-cache-secure-20260925-v1
