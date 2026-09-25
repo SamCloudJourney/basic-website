@@ -67,8 +67,19 @@ jobs:
           dotnet --info
           mkdir -p "$RUNNER_TEMP/hello"
           cd "$RUNNER_TEMP/hello"
-          dotnet new console --framework net10.0 --no-restore
-          dotnet build -c Release
+          cat > hello.csproj <<'EOF'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+</Project>
+EOF
+          cat > Program.cs <<'EOF'
+System.Console.WriteLine("PORTABLE_DOTNET_OK");
+EOF
+          dotnet build hello.csproj -c Release
+          dotnet bin/Release/net10.0/hello.dll | grep PORTABLE_DOTNET_OK
 
       - name: Upload portable toolchain
         uses: actions/upload-artifact@v4
