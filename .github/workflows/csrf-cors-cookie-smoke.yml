@@ -1,0 +1,136 @@
+name: csrf-cors-cookie-smoke
+
+on:
+  push:
+    branches:
+      - csrf-cors-cookie-smoke-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Clone ASP.NET Core release/11.0
+        run: |
+          git clone --depth 1 --branch release/11.0 https://github.com/dotnet/aspnetcore.git aspnetcore
+          git -C aspnetcore rev-parse HEAD
+
+      - name: Inject sanitized cookie/CORS harness
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("aspnetcore/src/DefaultBuilder/test/Microsoft.AspNetCore.Tests/CsrfProtectionIntegrationTests.cs")
+          text = path.read_text()
+          marker = "    [Fact]\n    public async Task CsrfProtection_UseStatusCodePagesWithReExecute_CsrfMarkerStampedOnReroutedRequest()"
+          if marker not in text:
+              raise SystemExit("marker not found")
+          insert = r'''    [Theory]
+              [InlineData(false)]
+              [InlineData(true)]
+              public async Task PublicSmoke_CookieAuthAndUseCorsCompile(bool inlineMiddlewarePolicy)
+              {
+                  var builder = WebApplication.CreateBuilder();
+                  builder.WebHost.UseTestServer();
+                  builder.Services.AddAuthentication("Test")
+                      .AddCookie("Test", options =>
+                      {
+                          options.Cookie.Name = "csrf-smoke";
+                          options.Cookie.SameSite = SameSiteMode.None;
+                          options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                          options.Events.OnRedirectToLogin = context =>
+                          {
+                              context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                              return Task.CompletedTask;
+                          };
+                      });
+                  builder.Services.AddAuthorization();
+                  builder.Services.AddCors(options =>
+                  {
+                      options.AddDefaultPolicy(policy =>
+                          policy.WithOrigins("https://admin.example.com").AllowCredentials());
+                      options.AddPolicy("Sensitive", policy =>
+                          policy.WithOrigins("https://admin.example.com").AllowCredentials());
+                  });
+                  using var app = builder.Build();
+
+                  var mutations = 0;
+
+                  app.MapGet("/issue-auth-cookie", async (HttpContext context) =>
+                  {
+                      var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "victim")], "Test");
+                      await context.SignInAsync("Test", new ClaimsPrincipal(identity));
+                      return Results.Ok();
+                  });
+
+                  if (inlineMiddlewarePolicy)
+                  {
+                      app.UseCors(policy =>
+                          policy.WithOrigins("https://admin.example.com").AllowCredentials());
+                  }
+                  else
+                  {
+                      app.UseCors("Sensitive");
+                  }
+
+                  app.MapPost("/form",
+                      (HttpContext context, [FromForm] string? name) =>
+                      {
+                          Assert.True(context.User.Identity?.IsAuthenticated);
+                          mutations++;
+                          return "mutated";
+                      })
+                      .RequireAuthorization();
+
+                  await app.StartAsync();
+                  var client = app.GetTestClient();
+
+                  using var login = await client.GetAsync("/issue-auth-cookie");
+                  Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+                  var setCookie = Assert.Single(login.Headers.GetValues("Set-Cookie"));
+                  Assert.True(setCookie.Contains("samesite=none", StringComparison.OrdinalIgnoreCase));
+                  Assert.True(setCookie.Contains("secure", StringComparison.OrdinalIgnoreCase));
+                  var authCookie = setCookie.Split(';', 2)[0];
+
+                  var request = new HttpRequestMessage(HttpMethod.Post, "/form")
+                  {
+                      Content = new FormUrlEncodedContent([new KeyValuePair<string, string>("name", "alice")]),
+                  };
+                  request.Headers.Add("Sec-Fetch-Site", "cross-site");
+                  request.Headers.Add("Origin", "https://admin.example.com");
+                  request.Headers.TryAddWithoutValidation("Cookie", authCookie);
+
+                  using var response = await client.SendAsync(request);
+
+                  Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+                  Assert.Equal("mutated", await response.Content.ReadAsStringAsync());
+                  Assert.Equal(1, mutations);
+                  Assert.Equal(
+                      "https://admin.example.com",
+                      Assert.Single(response.Headers.GetValues("Access-Control-Allow-Origin")));
+              }
+
+          '''
+          path.write_text(text.replace(marker, insert + marker))
+          PY
+          git -C aspnetcore diff --check
+
+      - name: Build target test project
+        working-directory: aspnetcore
+        run: |
+          ./eng/build.sh --ci --restore --build --build-managed \
+            --no-build-native --no-build-nodejs --no-build-java --no-build-installers \
+            --projects "$PWD/src/DefaultBuilder/test/Microsoft.AspNetCore.Tests/Microsoft.AspNetCore.Tests.csproj" \
+            --verbosity minimal
+
+      - name: Run sanitized smoke
+        working-directory: aspnetcore
+        run: |
+          ./.dotnet/dotnet test \
+            src/DefaultBuilder/test/Microsoft.AspNetCore.Tests/Microsoft.AspNetCore.Tests.csproj \
+            --no-build --no-restore \
+            --filter "FullyQualifiedName~PublicSmoke_CookieAuthAndUseCorsCompile" \
+            -v normal
