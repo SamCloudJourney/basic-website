@@ -1,1 +1,1 @@
-registry-auth-cache-secure-20260925-v4-matrix
+registry-auth-cache-secure-20260925-v5-net8
