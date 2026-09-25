@@ -88,6 +88,14 @@ jobs:
           EOF
           dotnet build webcheck.csproj -c Release --no-restore || dotnet build webcheck.csproj -c Release
 
+      - name: Locate RC1 internal assets
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet nuget locals global-packages --list
+          find /usr/share/dotnet "$RUNNER_TEMP" -type d -iname '*microsoft.aspnetcore.app.internal.assets*' -print 2>/dev/null | head -20 || true
+          grep -A12 -B2 '"packageFolders"' "$RUNNER_TEMP/webcheck/obj/project.assets.json" || true
+
       - name: Cache RC1 Web SDK internal assets
         shell: bash
         run: |
