@@ -23,3 +23,23 @@ jobs:
         run: |
           Write-Host "RUNNER_OK"
           dotnet --info
+
+  windows-path-semantics:
+    runs-on: windows-latest
+    steps:
+      - name: Resolve framework path semantics
+        shell: pwsh
+        run: |
+          $src = @'
+          using System;
+          using System.IO;
+          Console.WriteLine($"rooted_C_colon={Path.IsPathRooted("C:")}");
+          Console.WriteLine($"combine_2={Path.Combine(@"C:\ProgramData\dotnet\workloads", "C:")}");
+          Console.WriteLine($"combine_3={Path.Combine(@"C:\ProgramData\dotnet\workloads", "C:", "BountyProof")}");
+          Console.WriteLine($"full_3={Path.GetFullPath(Path.Combine(@"C:\ProgramData\dotnet\workloads", "C:", "BountyProof"))}");
+          Console.WriteLine($"full_dot={Path.GetFullPath(Path.Combine(@"C:\ProgramData\dotnet\workloads", "C:", "."))}");
+          '@
+          New-Item -ItemType Directory probe | Out-Null
+          Set-Content probe/Program.cs $src
+          Set-Content probe/probe.csproj '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>'
+          dotnet run --project probe/probe.csproj
