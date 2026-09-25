@@ -138,3 +138,60 @@ jobs:
           path: dotnet11-rc1-linux-x64.tar.gz
           retention-days: 1
           compression-level: 0
+
+
+  bundle-dotnet11-rc1-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install exact .NET 11 RC1 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100-rc.1.26425.128'
+
+      - name: Build standalone .NET 11 RC1 bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DOTNET_BIN="$(readlink -f "$(command -v dotnet)")"
+          SRC="$(dirname "$DOTNET_BIN")"
+          dotnet --info
+          echo "DOTNET_SRC=$SRC"
+          OUT="$RUNNER_TEMP/dotnet11-rc1"
+          mkdir -p "$OUT"
+          cp -a "$SRC/dotnet" "$OUT/"
+          cp -a "$SRC/host" "$OUT/"
+          cp -a "$SRC/sdk/11.0.100-rc.1.26425.128" "$OUT/sdk/"
+          mkdir -p "$OUT/shared" "$OUT/packs"
+          cp -a "$SRC/shared/Microsoft.NETCore.App" "$OUT/shared/"
+          cp -a "$SRC/shared/Microsoft.AspNetCore.App" "$OUT/shared/"
+          for pack in Microsoft.NETCore.App.Ref Microsoft.AspNetCore.App.Ref Microsoft.NETCore.App.Host.linux-x64 NETStandard.Library.Ref; do
+            if [ -d "$SRC/packs/$pack" ]; then
+              cp -a "$SRC/packs/$pack" "$OUT/packs/"
+            fi
+          done
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/dotnet-11-rc1-linux-x64.tgz" dotnet11-rc1
+
+      - name: Validate standalone RC1 Web SDK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          TEST="$RUNNER_TEMP/dotnet11-test"
+          mkdir -p "$TEST"
+          tar -C "$TEST" -xzf "$RUNNER_TEMP/dotnet-11-rc1-linux-x64.tgz"
+          export DOTNET_ROOT="$TEST/dotnet11-rc1"
+          export DOTNET_MULTILEVEL_LOOKUP=0
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet --info
+          mkdir -p "$RUNNER_TEMP/webcheck"
+          cd "$RUNNER_TEMP/webcheck"
+          printf '%s\n' '<Project Sdk="Microsoft.NET.Sdk.Web">' '  <PropertyGroup>' '    <TargetFramework>net11.0</TargetFramework>' '  </PropertyGroup>' '</Project>' > webcheck.csproj
+          printf '%s\n' 'var b = WebApplication.CreateBuilder(args);' 'var app = b.Build();' 'app.MapGet("/", () => "RC1_WEB_OK");' 'app.Run();' > Program.cs
+          dotnet build webcheck.csproj -c Release
+
+      - name: Upload .NET 11 RC1 toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-11.0.100-rc1-linux-x64
+          path: ${{ runner.temp }}/dotnet-11-rc1-linux-x64.tgz
+          retention-days: 1
+          compression-level: 0
