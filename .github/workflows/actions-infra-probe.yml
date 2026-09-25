@@ -112,3 +112,29 @@ jobs:
           path: ${{ runner.temp }}/dotnet-sdk-matrix-overlay.tgz
           retention-days: 1
           compression-level: 0
+
+  pack-dotnet11-rc1:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install .NET 11 RC1
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '11.0.100-rc.1.26425.128'
+
+      - name: Pack portable SDK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DOTNET_BIN="$(command -v dotnet)"
+          DOTNET_REAL="$(readlink -f "$DOTNET_BIN")"
+          DOTNET_ROOT_DIR="$(dirname "$DOTNET_REAL")"
+          "$DOTNET_REAL" --info
+          tar -C "$DOTNET_ROOT_DIR" -czf dotnet11-rc1-linux-x64.tar.gz .
+
+      - name: Upload portable SDK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet11-rc1-linux-x64
+          path: dotnet11-rc1-linux-x64.tar.gz
+          retention-days: 1
+          compression-level: 0
