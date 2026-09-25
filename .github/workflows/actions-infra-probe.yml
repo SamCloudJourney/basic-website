@@ -17,7 +17,7 @@ jobs:
         run: |
           echo "RUNNER_OK"
           uname -a
-          dotnet --info || true
+          dotnet --info
 
   windows:
     runs-on: windows-latest
@@ -29,16 +29,51 @@ jobs:
           [System.Environment]::OSVersion.VersionString
           dotnet --info
 
-  private-lab-checkout:
+  bundle-dotnet-linux:
     runs-on: ubuntu-latest
     steps:
-      - name: Test account-local private checkout
-        uses: actions/checkout@v4
-        with:
-          repository: SamCloudJourney/native-path-lab-20260830
-          ref: dotnet-bounty-audit-20260925
-          path: private-lab
-          persist-credentials: false
+      - name: Build minimal portable .NET 10.0.401 toolchain bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          SRC=/usr/share/dotnet
+          OUT="$RUNNER_TEMP/dotnet-portable"
+          mkdir -p "$OUT"/{host/fxr,shared/Microsoft.NETCore.App,sdk,packs/Microsoft.NETCore.App.Ref}
+          cp "$SRC/dotnet" "$OUT/dotnet"
+          cp -a "$SRC/host/fxr/10.0.12" "$OUT/host/fxr/"
+          cp -a "$SRC/shared/Microsoft.NETCore.App/10.0.12" "$OUT/shared/Microsoft.NETCore.App/"
+          cp -a "$SRC/sdk/10.0.401" "$OUT/sdk/"
+          REFPACK="$(find "$SRC/packs/Microsoft.NETCore.App.Ref" -mindepth 1 -maxdepth 1 -type d -name '10.0.*' | sort -V | tail -1)"
+          cp -a "$REFPACK" "$OUT/packs/Microsoft.NETCore.App.Ref/"
+          # SDK uses these apphost/host packs for ordinary console builds.
+          for pack in Microsoft.NETCore.App.Host.linux-x64 NETStandard.Library.Ref; do
+            if [ -d "$SRC/packs/$pack" ]; then
+              mkdir -p "$OUT/packs/$pack"
+              latest="$(find "$SRC/packs/$pack" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+              cp -a "$latest" "$OUT/packs/$pack/"
+            fi
+          done
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/dotnet-10.0.401-linux-x64.tgz" dotnet-portable
 
-      - name: Confirm private lab mounted
-        run: test -f private-lab/dotnet-audit/probes/roslyn-filekey/Probe.ps1
+      - name: Validate extracted toolchain
+        shell: bash
+        run: |
+          set -euxo pipefail
+          TEST="$RUNNER_TEMP/dotnet-test"
+          mkdir -p "$TEST"
+          tar -C "$TEST" -xzf "$RUNNER_TEMP/dotnet-10.0.401-linux-x64.tgz"
+          export DOTNET_ROOT="$TEST/dotnet-portable"
+          export PATH="$DOTNET_ROOT:$PATH"
+          dotnet --info
+          mkdir -p "$RUNNER_TEMP/hello"
+          cd "$RUNNER_TEMP/hello"
+          dotnet new console --framework net10.0 --no-restore
+          dotnet build -c Release
+
+      - name: Upload portable toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet-10.0.401-linux-x64-portable
+          path: ${{ runner.temp }}/dotnet-10.0.401-linux-x64.tgz
+          retention-days: 1
+          compression-level: 0
