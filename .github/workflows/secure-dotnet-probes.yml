@@ -19,7 +19,7 @@ jobs:
           - target: linux
             os: ubuntu-latest
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - name: Checkout runner repo
         uses: actions/checkout@v4
