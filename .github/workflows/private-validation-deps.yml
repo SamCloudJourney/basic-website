@@ -88,10 +88,25 @@ jobs:
           EOF
           dotnet build webcheck.csproj -c Release --no-restore || dotnet build webcheck.csproj -c Release
 
+      - name: Cache RC1 Web SDK internal assets
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p "$RUNNER_TEMP/rc1-nuget"
+          cp -a "$HOME/.nuget/packages/microsoft.aspnetcore.app.internal.assets" "$RUNNER_TEMP/rc1-nuget/" || true
+
       - name: Upload minimal RC1 toolchain
         uses: actions/upload-artifact@v4
         with:
           name: dotnet11-rc1-minimal
           path: ${{ runner.temp }}/dotnet11-rc1-minimal.tgz
+          retention-days: 1
+          compression-level: 0
+
+      - name: Upload RC1 internal assets package
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet11-rc1-internal-assets
+          path: ${{ runner.temp }}/rc1-nuget/
           retention-days: 1
           compression-level: 0
