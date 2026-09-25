@@ -6,11 +6,11 @@ on:
       - csrf-confidential-run-20260925
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   run:
-    if: ${{ !contains(github.event.head_commit.message, '[payload]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[bridge-data]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -21,24 +21,32 @@ jobs:
           git -C aspnetcore rev-parse HEAD
           mkdir -p confidential-runtime
 
-      - name: Generate one-time encryption key
+      - name: Generate and publish one-time public key
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out confidential-runtime/private.pem >/dev/null 2>&1
           openssl pkey -in confidential-runtime/private.pem -pubout -out confidential-runtime/public.pem
-          echo "-----BEGIN EPHEMERAL PUBLIC KEY B64-----"
-          base64 -w0 confidential-runtime/public.pem
-          echo
-          echo "-----END EPHEMERAL PUBLIC KEY B64-----"
+          base64 -w0 confidential-runtime/public.pem > confidential-runtime/public.b64
+          api_path="repos/$GITHUB_REPOSITORY/contents/confidential/$GITHUB_RUN_ID/public.b64"
+          encoded=$(base64 -w0 confidential-runtime/public.b64)
+          gh api --method PUT "$api_path" \
+            -f message="[bridge-data] publish ephemeral public key for $GITHUB_RUN_ID" \
+            -f content="$encoded" \
+            -f branch="$GITHUB_REF_NAME" >/dev/null
 
       - name: Wait for encrypted regression payload
         run: |
           set -euo pipefail
+          payload_path="confidential/$GITHUB_RUN_ID/payload.enc.b64"
+          key_path="confidential/$GITHUB_RUN_ID/key.enc.b64"
           for i in $(seq 1 120); do
             git -C dispatcher fetch -q origin "$GITHUB_REF_NAME"
-            if git -C dispatcher cat-file -e "origin/$GITHUB_REF_NAME:confidential/payload.enc.b64" 2>/dev/null && \
-               git -C dispatcher cat-file -e "origin/$GITHUB_REF_NAME:confidential/key.enc.b64" 2>/dev/null; then
-              git -C dispatcher show "origin/$GITHUB_REF_NAME:confidential/payload.enc.b64" > confidential-runtime/payload.enc.b64
-              git -C dispatcher show "origin/$GITHUB_REF_NAME:confidential/key.enc.b64" > confidential-runtime/key.enc.b64
+            if git -C dispatcher cat-file -e "origin/$GITHUB_REF_NAME:$payload_path" 2>/dev/null && \
+               git -C dispatcher cat-file -e "origin/$GITHUB_REF_NAME:$key_path" 2>/dev/null; then
+              git -C dispatcher show "origin/$GITHUB_REF_NAME:$payload_path" > confidential-runtime/payload.enc.b64
+              git -C dispatcher show "origin/$GITHUB_REF_NAME:$key_path" > confidential-runtime/key.enc.b64
               exit 0
             fi
             sleep 5
