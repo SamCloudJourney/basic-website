@@ -195,3 +195,128 @@ jobs:
           path: ${{ runner.temp }}/dotnet-11-rc1-linux-x64.tgz
           retention-days: 1
           compression-level: 0
+
+  generic-security-controls:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Create generic control project
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force control | Out-Null
+          @'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>net10.0</TargetFramework>
+              <OutputType>Exe</OutputType>
+              <ImplicitUsings>enable</ImplicitUsings>
+            </PropertyGroup>
+          </Project>
+          '@ | Set-Content control/control.csproj
+
+          @'
+          using System.Security.Claims;
+          using System.Diagnostics;
+
+          Console.WriteLine($"OS={Environment.OSVersion}");
+          Console.WriteLine($"DOTNET={Environment.Version}");
+
+          if (OperatingSystem.IsWindows())
+          {
+              const string root = @"C:\ProgramData\dotnet\workloads";
+              const string component = "C:";
+              const string leaf = "BountyProof";
+              Console.WriteLine($"ROOTED_C_COLON={Path.IsPathRooted(component)}");
+              Console.WriteLine($"COMBINE={Path.Combine(root, component, leaf)}");
+              Console.WriteLine($"FULL={Path.GetFullPath(Path.Combine(root, component, leaf))}");
+              Console.WriteLine($"DOT_VERSION_FULL={Path.GetFullPath(Path.Combine(root, component, "."))}");
+          }
+
+          var mixed = new ClaimsPrincipal(new[]
+          {
+              new ClaimsIdentity(),
+              new ClaimsIdentity(new[]
+              {
+                  new Claim(ClaimTypes.NameIdentifier, "control-user"),
+                  new Claim(ClaimTypes.Role, "Admin"),
+              }, "SecondaryAuth")
+          });
+          Console.WriteLine($"PRIMARY_AUTH={mixed.Identity?.IsAuthenticated}");
+          Console.WriteLine($"ANY_AUTH={mixed.Identities.Any(i => i.IsAuthenticated)}");
+          Console.WriteLine($"IS_ADMIN={mixed.IsInRole("Admin")}");
+
+          var temp = Path.Combine(Path.GetTempPath(), "case-control-" + Guid.NewGuid().ToString("N"));
+          Directory.CreateDirectory(temp);
+          try
+          {
+              var upper = Path.Combine(temp, "A.dll");
+              var lower = Path.Combine(temp, "a.dll");
+              File.WriteAllText(upper, "upper");
+              File.WriteAllText(lower, "lower");
+              var distinct = Directory.EnumerateFiles(temp).Count() == 2;
+              var stamp = DateTime.UtcNow.AddMinutes(-5);
+              File.SetLastWriteTimeUtc(upper, stamp);
+              File.SetLastWriteTimeUtc(lower, stamp);
+              Console.WriteLine($"CASE_DISTINCT={distinct}");
+              Console.WriteLine($"ORDINAL_EQUAL={string.Equals(upper, lower, StringComparison.Ordinal)}");
+              Console.WriteLine($"ORDINAL_IGNORECASE_EQUAL={string.Equals(upper, lower, StringComparison.OrdinalIgnoreCase)}");
+              Console.WriteLine($"MTIME_EQUAL={File.GetLastWriteTimeUtc(upper) == File.GetLastWriteTimeUtc(lower)}");
+          }
+          finally
+          {
+              Directory.Delete(temp, recursive: true);
+          }
+          '@ | Set-Content control/Program.cs
+
+      - name: Run generic controls
+        shell: pwsh
+        run: dotnet run --project control/control.csproj -c Release
+
+  conditional-attribute-control:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build control library and consumer
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/conditional-control/lib /tmp/conditional-control/app
+
+          cat >/tmp/conditional-control/lib/lib.csproj <<'EOF'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>net10.0</TargetFramework>
+              <AssemblyName>ControlLib</AssemblyName>
+            </PropertyGroup>
+          </Project>
+          EOF
+
+          cat >/tmp/conditional-control/lib/Guard.cs <<'EOF'
+          using System.Diagnostics;
+          public static class Guard {
+            [Conditional("NEVER")]
+            public static void Enforce() => throw new System.Exception("SHOULD_BE_OMITTED");
+          }
+          EOF
+
+          cat >/tmp/conditional-control/app/app.csproj <<'EOF'
+          <Project Sdk="Microsoft.NET.Sdk">
+            <PropertyGroup>
+              <TargetFramework>net10.0</TargetFramework>
+              <OutputType>Exe</OutputType>
+            </PropertyGroup>
+            <ItemGroup>
+              <ProjectReference Include="../lib/lib.csproj" />
+            </ItemGroup>
+          </Project>
+          EOF
+
+          cat >/tmp/conditional-control/app/Program.cs <<'EOF'
+          Guard.Enforce();
+          System.Console.WriteLine("AFTER_GUARD");
+          EOF
+
+          dotnet run --project /tmp/conditional-control/app/app.csproj -c Release | tee /tmp/conditional-control/result.txt
+          grep -q AFTER_GUARD /tmp/conditional-control/result.txt
