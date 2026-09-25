@@ -1,0 +1,28 @@
+name: runtime-mail-build-smoke
+on:
+  push:
+    branches:
+      - runtime-mail-smoke-20260925
+permissions:
+  contents: read
+jobs:
+  runtime-mail:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Clone runtime main
+        run: |
+          git clone --depth 1 --branch main https://github.com/dotnet/runtime.git runtime
+          git -C runtime rev-parse HEAD
+
+      - name: Build runtime and libraries prerequisites
+        working-directory: runtime
+        run: ./build.sh -subset clr+libs -rc Release -c Release
+
+      - name: Run known existing SMTP TLS test
+        working-directory: runtime/src/libraries/System.Net.Mail
+        run: |
+          ../../../dotnet.sh build /t:test ./tests/Functional/System.Net.Mail.Functional.Tests.csproj \
+            -c Release \
+            /p:TargetFramework=net11.0-unix \
+            /p:XunitMethodName=System.Net.Mail.Tests.SmtpClientTlsTest_Send.ClientCertificateRequired_Sent
