@@ -38,11 +38,12 @@ jobs:
           set -euxo pipefail
           SRC=/usr/share/dotnet
           OUT="$RUNNER_TEMP/dotnet-portable"
-          mkdir -p "$OUT"/{host/fxr,shared/Microsoft.NETCore.App,sdk,packs/Microsoft.NETCore.App.Ref}
+          mkdir -p "$OUT"/{host/fxr,shared/Microsoft.NETCore.App,sdk,packs/Microsoft.NETCore.App.Ref,packs/Microsoft.AspNetCore.App.Ref}
           cp "$SRC/dotnet" "$OUT/dotnet"
           cp -a "$SRC/host/fxr/10.0.12" "$OUT/host/fxr/"
           cp -a "$SRC/shared/Microsoft.NETCore.App/10.0.12" "$OUT/shared/Microsoft.NETCore.App/"
           cp -a "$SRC/sdk/10.0.401" "$OUT/sdk/"
+          cp -a "$SRC/packs/Microsoft.AspNetCore.App.Ref/10.0.12" "$OUT/packs/Microsoft.AspNetCore.App.Ref/"
           REFPACK="$(find "$SRC/packs/Microsoft.NETCore.App.Ref" -mindepth 1 -maxdepth 1 -type d -name '10.0.*' | sort -V | tail -1)"
           cp -a "$REFPACK" "$OUT/packs/Microsoft.NETCore.App.Ref/"
           # SDK uses these apphost/host packs for ordinary console builds.
@@ -63,6 +64,7 @@ jobs:
           mkdir -p "$TEST"
           tar -C "$TEST" -xzf "$RUNNER_TEMP/dotnet-10.0.401-linux-x64.tgz"
           export DOTNET_ROOT="$TEST/dotnet-portable"
+          export DOTNET_MULTILEVEL_LOOKUP=0
           export PATH="$DOTNET_ROOT:$PATH"
           dotnet --info
           mkdir -p "$RUNNER_TEMP/hello"
