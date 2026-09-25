@@ -1,0 +1,30 @@
+name: Actions Infrastructure Probe
+
+on:
+  push:
+    branches:
+      - actions-infra-probe-20260925
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Runner admitted
+        run: |
+          echo "RUNNER_OK"
+          uname -a
+          dotnet --info || true
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Runner admitted
+        shell: pwsh
+        run: |
+          Write-Host "RUNNER_OK"
+          [System.Environment]::OSVersion.VersionString
+          dotnet --info
