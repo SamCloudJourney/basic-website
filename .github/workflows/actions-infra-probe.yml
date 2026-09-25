@@ -28,3 +28,17 @@ jobs:
           Write-Host "RUNNER_OK"
           [System.Environment]::OSVersion.VersionString
           dotnet --info
+
+  private-lab-checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test account-local private checkout
+        uses: actions/checkout@v4
+        with:
+          repository: SamCloudJourney/native-path-lab-20260830
+          ref: dotnet-bounty-audit-20260925
+          path: private-lab
+          persist-credentials: false
+
+      - name: Confirm private lab mounted
+        run: test -f private-lab/dotnet-audit/probes/roslyn-filekey/Probe.ps1
