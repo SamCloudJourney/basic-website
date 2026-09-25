@@ -131,7 +131,7 @@ jobs:
           CORE="$(find "$SRC/shared/Microsoft.NETCore.App" -mindepth 1 -maxdepth 1 -type d -name '10.0.*' | sort -V | tail -1)"
           cp -a "$FXR" "$OUT/host/fxr/"
           cp -a "$CORE" "$OUT/shared/Microsoft.NETCore.App/"
-          for pack in Microsoft.NETCore.App.Ref Microsoft.NETCore.App.Host.linux-x64 NETStandard.Library.Ref; do
+          for pack in Microsoft.NETCore.App.Ref Microsoft.AspNetCore.App.Ref Microsoft.NETCore.App.Host.linux-x64 NETStandard.Library.Ref; do
             if [ -d "$SRC/packs/$pack" ]; then
               mkdir -p "$OUT/packs/$pack"
               if [[ "$pack" == NETStandard.Library.Ref ]]; then
