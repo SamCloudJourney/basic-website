@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $branch = "secure-dotnet-probes-20260925"
 $ref = "origin/" + $branch
-$base = "secure-payload/" + $Target
+$base = "secure-payload/" + $Target + "/" + $env:GITHUB_RUN_ID
 $resultDir = Join-Path $env:RUNNER_TEMP "secure-result"
 New-Item -ItemType Directory -Force -Path $resultDir | Out-Null
 
