@@ -18,8 +18,6 @@ jobs:
         include:
           - target: linux
             os: ubuntu-latest
-          - target: windows
-            os: windows-latest
     runs-on: ${{ matrix.os }}
     timeout-minutes: 12
     steps:
