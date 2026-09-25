@@ -30,122 +30,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Generate ephemeral payload key
+      - name: Run encrypted probe executor
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $rsa = [System.Security.Cryptography.RSA]::Create(3072)
-          [IO.File]::WriteAllText("$env:RUNNER_TEMP/payload-private.pem", $rsa.ExportRSAPrivateKeyPem())
-          $pub = $rsa.ExportSubjectPublicKeyInfoPem()
-          Write-Host "===EPHEMERAL_PUBLIC_KEY_${{ matrix.target }}_BEGIN==="
-          Write-Host $pub
-          Write-Host "===EPHEMERAL_PUBLIC_KEY_${{ matrix.target }}_END==="
-
-      - name: Wait for encrypted payload
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $target = "${{ matrix.target }}"
-          $ref = "origin/secure-dotnet-probes-20260925"
-          $base = "secure-payload/" + $target
-          $found = $false
-          for ($i = 0; $i -lt 72; $i++) {
-            git fetch origin secure-dotnet-probes-20260925 --quiet
-            $payloadSpec = $ref + ":" + $base + "/payload.b64"
-            $keySpec = $ref + ":" + $base + "/key.b64"
-            git cat-file -e $payloadSpec 2>$null
-            if ($LASTEXITCODE -eq 0) {
-              git cat-file -e $keySpec 2>$null
-              if ($LASTEXITCODE -eq 0) { $found = $true; break }
-            }
-            Start-Sleep -Seconds 5
-          }
-          if (-not $found) { throw "Encrypted payload was not supplied." }
-          foreach ($name in @("payload.b64","key.b64","nonce.b64","tag.b64")) {
-            $spec = $ref + ":" + $base + "/" + $name
-            git show $spec | Set-Content -NoNewline ("$env:RUNNER_TEMP/" + $name)
-          }
-
-      - name: Decrypt and execute payload
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $privatePem = [IO.File]::ReadAllText("$env:RUNNER_TEMP/payload-private.pem")
-          $rsa = [System.Security.Cryptography.RSA]::Create()
-          $rsa.ImportFromPem($privatePem)
-
-          $encKey = [Convert]::FromBase64String([IO.File]::ReadAllText("$env:RUNNER_TEMP/key.b64"))
-          $key = $rsa.Decrypt($encKey, [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA256)
-          $nonce = [Convert]::FromBase64String([IO.File]::ReadAllText("$env:RUNNER_TEMP/nonce.b64"))
-          $tag = [Convert]::FromBase64String([IO.File]::ReadAllText("$env:RUNNER_TEMP/tag.b64"))
-          $cipher = [Convert]::FromBase64String([IO.File]::ReadAllText("$env:RUNNER_TEMP/payload.b64"))
-          $plain = New-Object byte[] $cipher.Length
-          $aes = [System.Security.Cryptography.AesGcm]::new($key, 16)
-          $aes.Decrypt($nonce, $cipher, $tag, $plain)
-          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP/probe.ps1", $plain)
-
-          $resultPath = "$env:RUNNER_TEMP/result.txt"
-          & pwsh -NoLogo -NoProfile -NonInteractive -File "$env:RUNNER_TEMP/probe.ps1" *> $resultPath
-          $probeExit = $LASTEXITCODE
-          Add-Content $resultPath ([Environment]::NewLine + "SECURE_PROBE_EXIT=" + $probeExit)
-
-          Remove-Item "$env:RUNNER_TEMP/probe.ps1" -Force
-          Remove-Item "$env:RUNNER_TEMP/payload-private.pem" -Force
-          exit 0
-
-      - name: Encrypt result
-        if: always()
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          if (-not (Test-Path "$env:RUNNER_TEMP/result.txt")) {
-            "No result file was produced." | Set-Content "$env:RUNNER_TEMP/result.txt"
-          }
-
-          @'
------BEGIN PUBLIC KEY-----
-MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA1PROdRyG1mxDnYkBZJOf
-6q5u6UyqkpEQFUKGxnmUCR5NmR3npwwWaagNins/wRG4Be/h0STFfPXqVVTzGw8A
-Z9iR81FO60ZTE1OoejPftdtSoeVyI7hVgVipbrljegU9n4A7ltg6H5+2sPnbpDq3
-JOaSC2fp95kHHi6mS7h/R7KShuk8P9HqsxWI6/gV4F96749o9ueYM+MNNurnAOMW
-koY7uOI12/NXUCePTxJAhAL8pfGeiI2PVcig/Qn156/DNPCqkX3TT+xO1yQSC8Jk
-9RUFuurx+LHOm7jTXZ4ASZXkQSgNwLW8iWzDlGGaH+X2FpfuJowDnCJjyhX9VNZ7
-nmXgArnZU4T1ohFpbwm+Jba2vHJ7sW1N7HrTr7TfiiEmcLif5+GJexhrnWbJU8fC
-stMgm+LNB3Vkj31FtQyWlmPABhddtaIWJsZjcEfbpEEto+SiL0bWvEV2mPPswuav
-8r1yOxmSRYv1vdSMk4NmCcCYWXED2PlPeZSDRnNoE90xAgMBAAE=
------END PUBLIC KEY-----
-'@ | Set-Content "$env:RUNNER_TEMP/result-public.pem"
-
-          $rsa = [System.Security.Cryptography.RSA]::Create()
-          $rsa.ImportFromPem([IO.File]::ReadAllText("$env:RUNNER_TEMP/result-public.pem"))
-
-          $key = New-Object byte[] 32
-          $nonce = New-Object byte[] 12
-          [System.Security.Cryptography.RandomNumberGenerator]::Fill($key)
-          [System.Security.Cryptography.RandomNumberGenerator]::Fill($nonce)
-
-          $plain = [IO.File]::ReadAllBytes("$env:RUNNER_TEMP/result.txt")
-          $cipher = New-Object byte[] $plain.Length
-          $tag = New-Object byte[] 16
-          $aes = [System.Security.Cryptography.AesGcm]::new($key, 16)
-          $aes.Encrypt($nonce, $plain, $cipher, $tag)
-
-          $encKey = $rsa.Encrypt($key, [System.Security.Cryptography.RSAEncryptionPadding]::OaepSHA256)
-          [IO.File]::WriteAllText("$env:RUNNER_TEMP/result-key.b64", [Convert]::ToBase64String($encKey))
-          [IO.File]::WriteAllText("$env:RUNNER_TEMP/result-nonce.b64", [Convert]::ToBase64String($nonce))
-          [IO.File]::WriteAllText("$env:RUNNER_TEMP/result-tag.b64", [Convert]::ToBase64String($tag))
-          [IO.File]::WriteAllText("$env:RUNNER_TEMP/result-payload.b64", [Convert]::ToBase64String($cipher))
-          Remove-Item "$env:RUNNER_TEMP/result.txt" -Force
-          Remove-Item "$env:RUNNER_TEMP/result-public.pem" -Force
+        run: ./.github/secure-runner/runner.ps1 -Target "${{ matrix.target }}"
 
       - name: Upload encrypted result
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: secure-result-${{ matrix.target }}
-          path: |
-            ${{ runner.temp }}/result-key.b64
-            ${{ runner.temp }}/result-nonce.b64
-            ${{ runner.temp }}/result-tag.b64
-            ${{ runner.temp }}/result-payload.b64
+          path: ${{ runner.temp }}/secure-result/
           retention-days: 1
