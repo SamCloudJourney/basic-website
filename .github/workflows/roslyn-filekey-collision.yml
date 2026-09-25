@@ -13,6 +13,12 @@ on:
     paths:
       - "roslyn-filekey-lab/**"
       - ".github/workflows/roslyn-filekey-collision.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "roslyn-filekey-lab/**"
+      - ".github/workflows/roslyn-filekey-collision.yml"
   workflow_dispatch:
 
 permissions:
