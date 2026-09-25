@@ -28,12 +28,12 @@ jobs:
           text = path.read_text()
           project_text = project_path.read_text()
           if "Microsoft.AspNetCore.Authentication.Cookies" not in project_text:
-              anchor = '    <Reference Include="Microsoft.AspNetCore.Authentication.Core" />\\n'
+              anchor = '    <Reference Include="Microsoft.AspNetCore.Authentication.Core" />'
               if anchor not in project_text:
                   raise SystemExit("cookie reference anchor not found")
               project_path.write_text(project_text.replace(
                   anchor,
-                  anchor + '    <Reference Include="Microsoft.AspNetCore.Authentication.Cookies" />\\n'))
+                  anchor + '\\n    <Reference Include="Microsoft.AspNetCore.Authentication.Cookies" />'))
           marker = "    [Fact]\n    public async Task CsrfProtection_UseStatusCodePagesWithReExecute_CsrfMarkerStampedOnReroutedRequest()"
           if marker not in text:
               raise SystemExit("marker not found")
@@ -102,7 +102,7 @@ jobs:
                   var setCookie = Assert.Single(login.Headers.GetValues("Set-Cookie"));
                   Assert.True(setCookie.Contains("samesite=none", StringComparison.OrdinalIgnoreCase));
                   Assert.True(setCookie.Contains("secure", StringComparison.OrdinalIgnoreCase));
-                  var authCookie = setCookie.Split(';', 2)[0];
+                  var authCookie = setCookie.Split(';')[0];
 
                   var request = new HttpRequestMessage(HttpMethod.Post, "/form")
                   {
