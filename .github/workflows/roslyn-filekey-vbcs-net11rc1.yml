@@ -1,0 +1,62 @@
+name: Roslyn FileKey VBCS .NET 11 RC1
+
+on:
+  push:
+    branches:
+      - roslyn-filekey-collision-20260925
+    paths:
+      - ".github/workflows/roslyn-filekey-vbcs-net11rc1.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rc1:
+    name: ${{ matrix.os }} / .NET 11 RC1
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "11.0.100-rc.1.26425.128"
+      - name: Prepare case-sensitive lab root
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            DMG="$RUNNER_TEMP/roslyn-vbcs-11rc1.dmg"
+            hdiutil create -size 256m -fs HFSX -volname RoslynVBCS11RC1 "$DMG"
+            hdiutil attach -nobrowse "$DMG"
+            LAB_ROOT="/Volumes/RoslynVBCS11RC1"
+          else
+            LAB_ROOT="$RUNNER_TEMP/roslyn-vbcs-11rc1"
+            mkdir -p "$LAB_ROOT"
+          fi
+          echo "LAB_ROOT=$LAB_ROOT" >> "$GITHUB_ENV"
+          printf lower > "$LAB_ROOT/caseprobe"
+          printf UPPER > "$LAB_ROOT/CASEPROBE"
+          test "$(cat "$LAB_ROOT/caseprobe")" = lower
+          test "$(cat "$LAB_ROOT/CASEPROBE")" = UPPER
+      - name: Run RC1 VBCS collision
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x roslyn-filekey-lab/vbcs-cross-build.sh
+          roslyn-filekey-lab/vbcs-cross-build.sh "11.0.100-rc.1" 2>&1 | tee "$RUNNER_TEMP/vbcs-11rc1-${{ runner.os }}.log"
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roslyn-filekey-vbcs-11rc1-${{ runner.os }}
+          path: |
+            ${{ runner.temp }}/vbcs-11rc1-*.log
+            ${{ env.LAB_ROOT }}/vbcs-*/roslyn-command-line.log
+            ${{ env.LAB_ROOT }}/vbcs-*/trusted-native-canary.txt
