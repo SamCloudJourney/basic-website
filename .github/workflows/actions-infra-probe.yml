@@ -96,9 +96,13 @@ jobs:
           cp -a "$SRC/sdk/10.0.303" "$OUT/sdk/"
           cp -a "$SRC/sdk/9.0.318" "$OUT/sdk/"
           cp -a "$SRC/shared/Microsoft.NETCore.App/9.0.20" "$OUT/shared/Microsoft.NETCore.App/"
+          cp -a "$SRC/shared/Microsoft.NETCore.App/10.0.11" "$OUT/shared/Microsoft.NETCore.App/"
           cp -a "$SRC/packs/Microsoft.NETCore.App.Ref/9.0.20" "$OUT/packs/Microsoft.NETCore.App.Ref/"
+          cp -a "$SRC/packs/Microsoft.NETCore.App.Ref/10.0.11" "$OUT/packs/Microsoft.NETCore.App.Ref/"
           cp -a "$SRC/packs/Microsoft.AspNetCore.App.Ref/9.0.20" "$OUT/packs/Microsoft.AspNetCore.App.Ref/"
+          cp -a "$SRC/packs/Microsoft.AspNetCore.App.Ref/10.0.11" "$OUT/packs/Microsoft.AspNetCore.App.Ref/"
           cp -a "$SRC/packs/Microsoft.NETCore.App.Host.linux-x64/9.0.20" "$OUT/packs/Microsoft.NETCore.App.Host.linux-x64/"
+          cp -a "$SRC/packs/Microsoft.NETCore.App.Host.linux-x64/10.0.11" "$OUT/packs/Microsoft.NETCore.App.Host.linux-x64/"
           tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/dotnet-sdk-matrix-overlay.tgz" dotnet-matrix-overlay
 
       - name: Upload SDK matrix overlay
