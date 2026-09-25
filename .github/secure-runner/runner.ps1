@@ -19,6 +19,19 @@ Write-Host ("===EPHEMERAL_PUBLIC_KEY_" + $Target + "_BEGIN===")
 Write-Host $publicPem
 Write-Host ("===EPHEMERAL_PUBLIC_KEY_" + $Target + "_END===")
 
+# Publish only the ephemeral PUBLIC key on a one-run branch so the orchestrator
+# can encrypt the payload while this job is waiting. The private key never leaves this runner.
+$keyBranch = "secure-key-" + $Target + "-" + $env:GITHUB_RUN_ID
+git config user.name "secure-probe-runner"
+git config user.email "secure-probe-runner@users.noreply.github.com"
+git checkout -b $keyBranch | Out-Null
+New-Item -ItemType Directory -Force -Path "secure-key" | Out-Null
+[IO.File]::WriteAllText("secure-key/public.pem", $publicPem)
+git add secure-key/public.pem
+git commit -m ("Publish ephemeral public key for " + $Target) | Out-Null
+git push origin ("HEAD:" + $keyBranch) --quiet
+git checkout $branch | Out-Null
+
 $found = $false
 for ($i = 0; $i -lt 96; $i++) {
     git fetch origin $branch --quiet
