@@ -16,7 +16,7 @@ jobs:
           git -C runtime rev-parse HEAD
 
       - name: Install runtime native prerequisites
-        run: sudo apt-get update && sudo apt-get install -y libkrb5-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential gettext locales cmake llvm clang lld lldb liblldb-dev libunwind8-dev libicu-dev liblttng-ust-dev libssl-dev libkrb5-dev pigz cpio ninja-build file
 
       - name: Build runtime and libraries prerequisites
         working-directory: runtime
