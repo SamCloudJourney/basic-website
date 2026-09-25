@@ -8,7 +8,7 @@ on:
       - .github/secure-trigger/start.txt
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   secure-probe:
@@ -28,7 +28,7 @@ jobs:
         with:
           ref: secure-dotnet-probes-20260925
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
 
       - name: Run encrypted probe executor
         shell: pwsh
