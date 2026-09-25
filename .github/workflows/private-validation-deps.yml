@@ -110,3 +110,44 @@ jobs:
           path: ${{ runner.temp }}/rc1-nuget/
           retention-days: 1
           compression-level: 0
+
+
+  bundle-dotnet10-401-minimal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build minimal portable .NET 10.0.401 bundle
+        shell: bash
+        run: |
+          set -euxo pipefail
+          DOTNET_REAL="$(readlink -f "$(command -v dotnet)")"
+          SRC="$(dirname "$DOTNET_REAL")"
+          SDK_VER=10.0.401
+          test -d "$SRC/sdk/$SDK_VER"
+          OUT="$RUNNER_TEMP/dotnet10-min"
+          mkdir -p "$OUT/host/fxr" "$OUT/sdk" "$OUT/shared/Microsoft.NETCore.App" "$OUT/packs"
+          cp "$SRC/dotnet" "$OUT/dotnet"
+          cp -a "$SRC/sdk/$SDK_VER" "$OUT/sdk/"
+          FXR="$(find "$SRC/host/fxr" -mindepth 1 -maxdepth 1 -type d -name '10.0.*' | sort -V | tail -1)"
+          CORE="$(find "$SRC/shared/Microsoft.NETCore.App" -mindepth 1 -maxdepth 1 -type d -name '10.0.*' | sort -V | tail -1)"
+          cp -a "$FXR" "$OUT/host/fxr/"
+          cp -a "$CORE" "$OUT/shared/Microsoft.NETCore.App/"
+          for pack in Microsoft.NETCore.App.Ref Microsoft.NETCore.App.Host.linux-x64 NETStandard.Library.Ref; do
+            if [ -d "$SRC/packs/$pack" ]; then
+              mkdir -p "$OUT/packs/$pack"
+              if [[ "$pack" == NETStandard.Library.Ref ]]; then
+                latest="$(find "$SRC/packs/$pack" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+              else
+                latest="$(find "$SRC/packs/$pack" -mindepth 1 -maxdepth 1 -type d -name '10.0.*' | sort -V | tail -1)"
+              fi
+              cp -a "$latest" "$OUT/packs/$pack/"
+            fi
+          done
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/dotnet10-401-minimal.tgz" dotnet10-min
+
+      - name: Upload .NET 10.0.401 toolchain
+        uses: actions/upload-artifact@v4
+        with:
+          name: dotnet10-401-minimal
+          path: ${{ runner.temp }}/dotnet10-401-minimal.tgz
+          retention-days: 1
+          compression-level: 0
