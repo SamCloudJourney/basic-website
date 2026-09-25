@@ -151,3 +151,21 @@ jobs:
           path: ${{ runner.temp }}/dotnet10-401-minimal.tgz
           retention-days: 1
           compression-level: 0
+
+
+  windows-framework-path-semantics:
+    runs-on: windows-latest
+    steps:
+      - name: Record .NET Windows path behavior
+        shell: pwsh
+        run: |
+          $root = [IO.Path]::Combine("C:\ProgramData", "dotnet", "workloads")
+          $two = [IO.Path]::Combine($root, "C:")
+          $three = [IO.Path]::Combine($root, "C:", "BountyProof")
+          $dot = [IO.Path]::Combine($root, "C:", ".")
+          Write-Host "rooted_C_colon=$([IO.Path]::IsPathRooted('C:'))"
+          Write-Host "combine_2=$two"
+          Write-Host "combine_3=$three"
+          Write-Host "full_3=$([IO.Path]::GetFullPath($three))"
+          Write-Host "combine_dot=$dot"
+          Write-Host "full_dot=$([IO.Path]::GetFullPath($dot))"
