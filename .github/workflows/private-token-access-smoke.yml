@@ -1,0 +1,24 @@
+name: private-token-access-smoke
+on:
+  push:
+    branches:
+      - actions-runner-smoke-20260925
+permissions:
+  contents: read
+jobs:
+  access:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test whether public-repo GITHUB_TOKEN can read private lab
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          git ls-remote "https://x-access-token:${GH_TOKEN}@github.com/SamCloudJourney/native-path-lab-20260830.git" HEAD >/dev/null 2>&1
+          rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo "cross_repo_private_access=true"
+          else
+            echo "cross_repo_private_access=false"
+            exit 1
+          fi
