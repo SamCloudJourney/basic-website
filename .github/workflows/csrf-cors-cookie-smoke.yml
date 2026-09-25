@@ -33,7 +33,7 @@ jobs:
                   raise SystemExit("cookie reference anchor not found")
               project_path.write_text(project_text.replace(
                   anchor,
-                  anchor + '\\n    <Reference Include="Microsoft.AspNetCore.Authentication.Cookies" />'))
+                  anchor + chr(10) + '    <Reference Include="Microsoft.AspNetCore.Authentication.Cookies" />'))
           marker = "    [Fact]\n    public async Task CsrfProtection_UseStatusCodePagesWithReExecute_CsrfMarkerStampedOnReroutedRequest()"
           if marker not in text:
               raise SystemExit("marker not found")
