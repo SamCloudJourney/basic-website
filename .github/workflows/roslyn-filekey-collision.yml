@@ -1,0 +1,140 @@
+name: Roslyn FileKey Unix collision lab
+
+on:
+  push:
+    branches:
+      - roslyn-filekey-collision-20260925
+    paths:
+      - "roslyn-filekey-lab/**"
+      - ".github/workflows/roslyn-filekey-collision.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "roslyn-filekey-lab/**"
+      - ".github/workflows/roslyn-filekey-collision.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  filekey-collision:
+    name: ${{ matrix.os }} / Roslyn ${{ matrix.roslyn }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        roslyn:
+          - "4.8.0"
+          - "4.14.0"
+          - "5.0.0"
+          - "5.6.0"
+          - "5.9.0"
+
+    env:
+      ROSLYN_VERSION: ${{ matrix.roslyn }}
+
+    steps:
+      - name: Checkout lab branch
+        uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Prepare case-sensitive filesystem
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            DMG="$RUNNER_TEMP/roslyn-filekey-case-sensitive.dmg"
+            hdiutil create -size 128m -fs HFSX -volname RoslynCaseLab "$DMG"
+            hdiutil attach -nobrowse "$DMG"
+            LAB_ROOT="/Volumes/RoslynCaseLab/filekey-lab"
+            mkdir -p "$LAB_ROOT"
+            test "$(stat -f '%T' /Volumes/RoslynCaseLab)" != ""
+          else
+            LAB_ROOT="$RUNNER_TEMP/roslyn-filekey-lab"
+            mkdir -p "$LAB_ROOT"
+          fi
+          echo "LAB_ROOT=$LAB_ROOT" >> "$GITHUB_ENV"
+          printf 'lower' > "$LAB_ROOT/caseprobe"
+          printf 'UPPER' > "$LAB_ROOT/CASEPROBE"
+          test "$(cat "$LAB_ROOT/caseprobe")" = "lower"
+          test "$(cat "$LAB_ROOT/CASEPROBE")" = "UPPER"
+          ls -li "$LAB_ROOT"
+
+      - name: Restore Roslyn ${{ matrix.roslyn }}
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet --info
+          dotnet restore roslyn-filekey-lab/RoslynFileKeyLab.csproj \
+            -p:RoslynVersion="$ROSLYN_VERSION"
+
+      - name: Run in-process collision and negative controls
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run \
+            --project roslyn-filekey-lab/RoslynFileKeyLab.csproj \
+            --no-restore \
+            -p:RoslynVersion="$ROSLYN_VERSION" \
+            -- test-all \
+            2>&1 | tee "$RUNNER_TEMP/test-all-$RUNNER_OS-$ROSLYN_VERSION.log"
+
+      - name: Capture inode and path evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euxo pipefail
+          {
+            echo "RUNNER_OS=$RUNNER_OS"
+            echo "ROSLYN_VERSION=$ROSLYN_VERSION"
+            echo "LAB_ROOT=$LAB_ROOT"
+            find "$LAB_ROOT" -maxdepth 3 -type f -print0 | while IFS= read -r -d '' f; do
+              ls -li "$f"
+            done
+          } 2>&1 | tee "$RUNNER_TEMP/inode-$RUNNER_OS-$ROSLYN_VERSION.log"
+
+      - name: Test process-boundary cache lifetime
+        shell: bash
+        run: |
+          set -euxo pipefail
+          dotnet run \
+            --project roslyn-filekey-lab/RoslynFileKeyLab.csproj \
+            --no-restore \
+            -p:RoslynVersion="$ROSLYN_VERSION" \
+            -- process-prime \
+            2>&1 | tee "$RUNNER_TEMP/process-prime-$RUNNER_OS-$ROSLYN_VERSION.log"
+
+          dotnet run \
+            --project roslyn-filekey-lab/RoslynFileKeyLab.csproj \
+            --no-restore \
+            -p:RoslynVersion="$ROSLYN_VERSION" \
+            -- process-consume \
+            2>&1 | tee "$RUNNER_TEMP/process-consume-$RUNNER_OS-$ROSLYN_VERSION.log"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roslyn-filekey-${{ runner.os }}-${{ matrix.roslyn }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/test-all-*.log
+            ${{ runner.temp }}/inode-*.log
+            ${{ runner.temp }}/process-prime-*.log
+            ${{ runner.temp }}/process-consume-*.log
+            ${{ env.LAB_ROOT }}/positive/*
+            ${{ env.LAB_ROOT }}/control-timestamp/*
+            ${{ env.LAB_ROOT }}/control-path/*
+            ${{ env.LAB_ROOT }}/control-cache-reset/*
+            ${{ env.LAB_ROOT }}/control-no-prime/*
+            ${{ env.LAB_ROOT }}/process-boundary/*
