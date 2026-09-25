@@ -27,6 +27,14 @@ jobs:
           project_path = Path("aspnetcore/src/DefaultBuilder/test/Microsoft.AspNetCore.Tests/Microsoft.AspNetCore.Tests.csproj")
           text = path.read_text()
           project_text = project_path.read_text()
+          for using_line, using_anchor in [
+              ("using System.Security.Claims;" + chr(10), "using System.Net.Http;" + chr(10)),
+              ("using Microsoft.AspNetCore.Authentication;" + chr(10), "using Microsoft.AspNetCore.Antiforgery;" + chr(10)),
+          ]:
+              if using_line.strip() not in text:
+                  if using_anchor not in text:
+                      raise SystemExit("using anchor not found: " + using_line.strip())
+                  text = text.replace(using_anchor, using_anchor + using_line)
           if "Microsoft.AspNetCore.Authentication.Cookies" not in project_text:
               anchor = '    <Reference Include="Microsoft.AspNetCore.Authentication.Core" />'
               if anchor not in project_text:
