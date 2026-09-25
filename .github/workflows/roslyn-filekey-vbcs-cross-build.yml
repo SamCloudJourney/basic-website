@@ -1,0 +1,75 @@
+name: Roslyn FileKey VBCS cross-build lab
+
+on:
+  push:
+    branches:
+      - roslyn-filekey-collision-20260925
+    paths:
+      - "roslyn-filekey-lab/vbcs-cross-build.sh"
+      - ".github/workflows/roslyn-filekey-vbcs-cross-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vbcs-cross-build:
+    name: ${{ matrix.os }} / SDK ${{ matrix.sdk }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        sdk:
+          - "8.0"
+          - "9.0"
+          - "10.0"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "${{ matrix.sdk }}.x"
+
+      - name: Prepare case-sensitive lab root
+        shell: bash
+        run: |
+          set -euxo pipefail
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            DMG="$RUNNER_TEMP/roslyn-vbcs-case-sensitive.dmg"
+            hdiutil create -size 256m -fs HFSX -volname RoslynVBCSCaseLab "$DMG"
+            hdiutil attach -nobrowse "$DMG"
+            LAB_ROOT="/Volumes/RoslynVBCSCaseLab"
+          else
+            LAB_ROOT="$RUNNER_TEMP/roslyn-vbcs-case-lab"
+            mkdir -p "$LAB_ROOT"
+          fi
+          echo "LAB_ROOT=$LAB_ROOT" >> "$GITHUB_ENV"
+          printf lower > "$LAB_ROOT/caseprobe"
+          printf UPPER > "$LAB_ROOT/CASEPROBE"
+          test "$(cat "$LAB_ROOT/caseprobe")" = lower
+          test "$(cat "$LAB_ROOT/CASEPROBE")" = UPPER
+          ls -li "$LAB_ROOT"
+
+      - name: Run real VBCSCompiler cross-build test
+        shell: bash
+        run: |
+          set -o pipefail
+          chmod +x roslyn-filekey-lab/vbcs-cross-build.sh
+          roslyn-filekey-lab/vbcs-cross-build.sh "${{ matrix.sdk }}" 2>&1 | tee "$RUNNER_TEMP/vbcs-${{ runner.os }}-${{ matrix.sdk }}.log"
+
+      - name: Upload VBCS evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: roslyn-filekey-vbcs-${{ runner.os }}-${{ matrix.sdk }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/vbcs-*.log
+            ${{ env.LAB_ROOT }}/vbcs-*/roslyn-command-line.log
+            ${{ env.LAB_ROOT }}/vbcs-*/trusted-canary.txt
