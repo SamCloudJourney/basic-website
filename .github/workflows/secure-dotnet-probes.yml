@@ -1,9 +1,9 @@
-name: Secure Dotnet Probe Runner
+name: Secure Registry Auth Cache Runner
 
 on:
   push:
     branches:
-      - secure-dotnet-probes-20260925
+      - registry-auth-cache-secure-20260925
     paths:
       - .github/secure-trigger/start.txt
 
@@ -24,7 +24,7 @@ jobs:
       - name: Checkout runner repo
         uses: actions/checkout@v4
         with:
-          ref: secure-dotnet-probes-20260925
+          ref: registry-auth-cache-secure-20260925
           fetch-depth: 0
           persist-credentials: true
 
