@@ -76,6 +76,8 @@ jobs:
 
                   var mutations = 0;
 
+                  app.UseRouting();
+
                   app.MapGet("/issue-auth-cookie", async (HttpContext context) =>
                   {
                       var identity = new ClaimsIdentity([new Claim(ClaimTypes.Name, "victim")], "Test");
