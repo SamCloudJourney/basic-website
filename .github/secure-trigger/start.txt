@@ -1,1 +1,1 @@
-secure-dotnet-probes-20260925-v2
+secure-dotnet-probes-20260925-v3
