@@ -97,6 +97,7 @@ cat > "$ROOT/primer/Primer.csproj" <<EOF
 </Project>
 EOF
 cat > "$ROOT/primer/Program.cs" <<'EOF'
+using System;
 using SecurityRef;
 Console.WriteLine($"PRIMER_METADATA={Policy.Marker}:{Policy.AllowCanary}");
 EOF
