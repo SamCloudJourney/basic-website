@@ -1,0 +1,85 @@
+name: confidential-regression-runner
+
+on:
+  push:
+    branches:
+      - csrf-confidential-run-20260925
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    if: ${{ !contains(github.event.head_commit.message, '[payload]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Prepare source and dispatcher
+        run: |
+          git clone --depth 1 --branch v11.0.0-rc.1.26425.128 https://github.com/dotnet/aspnetcore.git aspnetcore
+          git clone --depth 1 --branch "$GITHUB_REF_NAME" "https://github.com/$GITHUB_REPOSITORY.git" dispatcher
+          git -C aspnetcore rev-parse HEAD
+          mkdir -p confidential-runtime
+
+      - name: Generate one-time encryption key
+        run: |
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out confidential-runtime/private.pem >/dev/null 2>&1
+          openssl pkey -in confidential-runtime/private.pem -pubout -out confidential-runtime/public.pem
+          echo "-----BEGIN EPHEMERAL PUBLIC KEY B64-----"
+          base64 -w0 confidential-runtime/public.pem
+          echo
+          echo "-----END EPHEMERAL PUBLIC KEY B64-----"
+
+      - name: Wait for encrypted regression payload
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            git -C dispatcher fetch -q origin "$GITHUB_REF_NAME"
+            if git -C dispatcher cat-file -e "origin/$GITHUB_REF_NAME:confidential/payload.enc.b64" 2>/dev/null && \
+               git -C dispatcher cat-file -e "origin/$GITHUB_REF_NAME:confidential/key.enc.b64" 2>/dev/null; then
+              git -C dispatcher show "origin/$GITHUB_REF_NAME:confidential/payload.enc.b64" > confidential-runtime/payload.enc.b64
+              git -C dispatcher show "origin/$GITHUB_REF_NAME:confidential/key.enc.b64" > confidential-runtime/key.enc.b64
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Encrypted payload did not arrive"
+          exit 1
+
+      - name: Decrypt and inject regression
+        run: |
+          set -euo pipefail
+          base64 -d confidential-runtime/key.enc.b64 > confidential-runtime/key.enc
+          openssl pkeyutl -decrypt \
+            -inkey confidential-runtime/private.pem \
+            -in confidential-runtime/key.enc \
+            -out confidential-runtime/keyblob.txt \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256
+          source confidential-runtime/keyblob.txt
+          base64 -d confidential-runtime/payload.enc.b64 > confidential-runtime/payload.enc
+          openssl enc -d -aes-256-cbc \
+            -K "$KEYHEX" -iv "$IVHEX" \
+            -in confidential-runtime/payload.enc \
+            -out confidential-runtime/payload.py
+          test "$(sha256sum confidential-runtime/payload.py | awk '{print $1}')" = "$SHA256"
+          python3 confidential-runtime/payload.py aspnetcore
+          rm -f confidential-runtime/private.pem confidential-runtime/keyblob.txt confidential-runtime/payload.py
+          git -C aspnetcore diff --check
+
+      - name: Build target project
+        working-directory: aspnetcore
+        run: |
+          ./eng/build.sh --ci --restore --build --build-managed \
+            --no-build-native --no-build-nodejs --no-build-java --no-build-installers \
+            --projects "$PWD/src/DefaultBuilder/test/Microsoft.AspNetCore.Tests/Microsoft.AspNetCore.Tests.csproj" \
+            --verbosity minimal
+
+      - name: Run confidential regression
+        working-directory: aspnetcore
+        run: |
+          ./.dotnet/dotnet test \
+            src/DefaultBuilder/test/Microsoft.AspNetCore.Tests/Microsoft.AspNetCore.Tests.csproj \
+            --no-build --no-restore -c Release \
+            --filter "FullyQualifiedName~ConfidentialRegression_A" \
+            -v minimal
