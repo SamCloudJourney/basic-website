@@ -21,7 +21,6 @@ jobs:
           git checkout 00ae08b7f1bdbb887aedece384aca2f942aae432
           test "$(git rev-parse HEAD)" = "00ae08b7f1bdbb887aedece384aca2f942aae432"
           git rev-parse HEAD > ../audited-sha.txt
-          rm -rf .git
       - name: Package public source
         run: tar -czf mpc-lib-00ae08b-source.tar.gz mpc-lib audited-sha.txt
       - name: Upload public-source artifact
