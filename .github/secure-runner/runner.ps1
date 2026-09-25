@@ -5,7 +5,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$branch = "secure-dotnet-probes-20260925"
+$branch = "registry-auth-cache-secure-20260925"
 $ref = "origin/" + $branch
 $base = "secure-payload/" + $Target + "/" + $env:GITHUB_RUN_ID
 $resultDir = Join-Path $env:RUNNER_TEMP "secure-result"
@@ -88,15 +88,15 @@ if (-not (Test-Path $resultPath)) {
 
 $resultPublicPem = @'
 -----BEGIN PUBLIC KEY-----
-MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA1PROdRyG1mxDnYkBZJOf
-6q5u6UyqkpEQFUKGxnmUCR5NmR3npwwWaagNins/wRG4Be/h0STFfPXqVVTzGw8A
-Z9iR81FO60ZTE1OoejPftdtSoeVyI7hVgVipbrljegU9n4A7ltg6H5+2sPnbpDq3
-JOaSC2fp95kHHi6mS7h/R7KShuk8P9HqsxWI6/gV4F96749o9ueYM+MNNurnAOMW
-koY7uOI12/NXUCePTxJAhAL8pfGeiI2PVcig/Qn156/DNPCqkX3TT+xO1yQSC8Jk
-9RUFuurx+LHOm7jTXZ4ASZXkQSgNwLW8iWzDlGGaH+X2FpfuJowDnCJjyhX9VNZ7
-nmXgArnZU4T1ohFpbwm+Jba2vHJ7sW1N7HrTr7TfiiEmcLif5+GJexhrnWbJU8fC
-stMgm+LNB3Vkj31FtQyWlmPABhddtaIWJsZjcEfbpEEto+SiL0bWvEV2mPPswuav
-8r1yOxmSRYv1vdSMk4NmCcCYWXED2PlPeZSDRnNoE90xAgMBAAE=
+MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA1ypshdRx7Y00QyYQ7vfG
+d+yyHLI9f382aXHe4U5Iimn9t/m9zMr8cBmcnUs58Uz1C9dyRZ3yu3Zd7p+rySAA
+oLb9c+qZ7PwJ2njwt5afKKAWyi4flOJIm00qG5NuFaegYIiBmirwvOkuu2vriIKk
+4It0Dswr9tkSTOl6+Kd0WwEyBtgfzvuvGNF+c9wJ4alfMnOKdP/Iw9iwwiQgw2vG
+hBP4ZxoCcm+xJP9qrg2AKQOO6VoFbbnnpuRXicBjbcrmmCeIezWiWUCt1M0X6dbd
+CoEvUWoMNHG622/v06uPI5NRc9nhJRDH9RypF3BtslA6VPDqXnElqemkqQ2lgdTl
+58d/Hz4kiu9spQ4mIykng0KL2kCBJnjIu17aTn7Cw5Ke2zDrxXZzVKcTP7AglNZl
+DWne49yhBn9j4gL08C+dA9yuBQcwvtJjMeREmfm0wwFx6IQyWZjgcvJ386jyLTfl
+cMqOYbl1cKzJ9OXsBIwIUn3iLb4B8Fp8B9DhTM1EeIoRAgMBAAE=
 -----END PUBLIC KEY-----
 '@
 
