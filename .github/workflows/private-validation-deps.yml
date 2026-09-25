@@ -77,6 +77,9 @@ jobs:
           </Project>
           EOF
           cat > Program.cs <<'EOF'
+          using Microsoft.AspNetCore.Builder;
+          using Microsoft.Extensions.DependencyInjection;
+
           var b = WebApplication.CreateBuilder(args);
           b.Services.AddRazorComponents();
           var app = b.Build();
