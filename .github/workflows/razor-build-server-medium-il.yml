@@ -1,0 +1,46 @@
+name: Razor build-server Medium IL file-write probe
+
+on:
+  push:
+    branches:
+      - research/razor-build-server-medium-il-file-write-20260921
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Environment
+        shell: pwsh
+        run: |
+          dotnet --info
+          whoami
+          whoami /groups
+
+      - name: Build probe
+        shell: pwsh
+        run: |
+          dotnet build research/razor-build-server-eop/RazorBuildServerEopProbe.csproj -c Release
+
+      - name: Run real Razor server probe
+        shell: pwsh
+        run: |
+          $sdk = (dotnet --version).Trim()
+          $rzc = Join-Path $env:DOTNET_ROOT "sdk\$sdk\Sdks\Microsoft.NET.Sdk.Razor\tools\rzc.dll"
+          Write-Host "RZC=$rzc"
+          if (-not (Test-Path $rzc)) {
+            Get-ChildItem (Join-Path $env:DOTNET_ROOT "sdk") -Filter rzc.dll -Recurse | Select-Object -ExpandProperty FullName
+            throw "rzc.dll not found at expected selected-SDK path"
+          }
+          $dll = Resolve-Path "research/razor-build-server-eop/bin/Release/net10.0/RazorBuildServerEopProbe.dll"
+          dotnet $dll $rzc
