@@ -1,0 +1,57 @@
+name: SDK workload pipe EoP supported-version matrix
+
+on:
+  push:
+    branches:
+      - research/dotnet-sdk-workload-pipe-pid-binding-20260921
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        sdk:
+          - "8.0.424"
+          - "9.0.317"
+          - "10.0.401"
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            10.0.401
+            ${{ matrix.sdk }}
+
+      - name: Build probe with SDK 10
+        shell: pwsh
+        run: |
+          if (Test-Path global.json) { Remove-Item global.json -Force }
+          dotnet --version
+          dotnet build research/sdk-workload-pipe-pid-binding/PipeHijackProbe.csproj -c Release
+
+      - name: Select target SDK
+        shell: pwsh
+        run: |
+          @'
+          {
+            "sdk": {
+              "version": "${{ matrix.sdk }}",
+              "rollForward": "disable"
+            }
+          }
+          '@ | Set-Content -Encoding utf8 global.json
+          Write-Host "TARGET_SDK=${{ matrix.sdk }}"
+          dotnet --version
+
+      - name: Run real broker Medium-IL EoP probe
+        shell: pwsh
+        run: |
+          $dll = Resolve-Path "research/sdk-workload-pipe-pid-binding/bin/Release/net10.0/PipeHijackProbe.dll"
+          dotnet $dll
