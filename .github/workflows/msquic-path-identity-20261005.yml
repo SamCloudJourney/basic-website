@@ -39,6 +39,14 @@ jobs:
           cd msquic
           cat >> src/core/unittest/RangeTest.cpp <<'EOF'
 
+          // The production C functions have C linkage, while path.h is consumed by
+          // this C++ test target without an extern-C wrapper. Bind directly to the
+          // real symbols so the test executes current path.c rather than reimplementing it.
+          extern "C" BOOLEAN Test_QuicPathRemove(
+              QUIC_CONNECTION*, uint8_t) __asm__("QuicPathRemove");
+          extern "C" QUIC_PATH* Test_QuicConnGetPathByID(
+              QUIC_CONNECTION*, uint8_t, uint8_t*) __asm__("QuicConnGetPathByID");
+
           TEST(PathIdentityTest, InUseGuardDoesNotPreservePathIdentityAcrossCompaction)
           {
               QUIC_CONNECTION Connection {};
@@ -57,7 +65,7 @@ jobs:
               // Remove a lower-index non-active path exactly as CID retirement can do
               // from QuicConnReplaceRetiredCids while receive post-processing retains
               // a QUIC_PATH* captured before frame processing.
-              ASSERT_TRUE(QuicPathRemove(&Connection, 1));
+              ASSERT_TRUE(Test_QuicPathRemove(&Connection, 1));
               ASSERT_EQ(Connection.PathsCount, (uint8_t)3);
 
               // The saved address is still inside the live array and InUse is TRUE,
@@ -69,7 +77,7 @@ jobs:
               // Identity lookup finds the packet's real path at a different address.
               uint8_t CurrentIndex = UINT8_MAX;
               QUIC_PATH* CurrentPacketPath =
-                  QuicConnGetPathByID(&Connection, OriginalPacketPathId, &CurrentIndex);
+                  Test_QuicConnGetPathByID(&Connection, OriginalPacketPathId, &CurrentIndex);
               ASSERT_NE(CurrentPacketPath, nullptr);
               EXPECT_EQ(CurrentIndex, (uint8_t)1);
               EXPECT_EQ(CurrentPacketPath->ID, OriginalPacketPathId);
