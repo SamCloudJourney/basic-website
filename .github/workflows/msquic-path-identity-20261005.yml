@@ -1,0 +1,107 @@
+name: MsQuic path identity regression research
+
+on:
+  push:
+    branches:
+      - research/msquic-path-identity-20261005
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  path-identity:
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/microsoft/msquic/linux-build-xcomp:ubuntu-24.04-cross
+    timeout-minutes: 60
+    steps:
+      - name: Checkout harness repository
+        uses: actions/checkout@v4
+
+      - name: Clone pinned MsQuic
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git clone https://github.com/microsoft/msquic.git msquic
+          cd msquic
+          git checkout 900ef64e86227e88936f578b9a3bb6ca6acb65a6
+          git submodule update --init --recursive
+          echo "MSQUIC_SHA=$(git rev-parse HEAD)"
+
+      - name: Inject focused current-source regression test
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd msquic
+          cat >> src/core/unittest/RangeTest.cpp <<'EOF'
+
+          // The production C functions have C linkage, while path.h is consumed by
+          // this C++ test target without an extern-C wrapper. Bind directly to the
+          // real symbols so the test executes current path.c rather than reimplementing it.
+          extern "C" BOOLEAN Test_QuicPathRemove(
+              QUIC_CONNECTION*, uint8_t) __asm__("QuicPathRemove");
+          extern "C" QUIC_PATH* Test_QuicConnGetPathByID(
+              QUIC_CONNECTION*, uint8_t, uint8_t*) __asm__("QuicConnGetPathByID");
+
+          TEST(PathIdentityTest, InUseGuardDoesNotPreservePathIdentityAcrossCompaction)
+          {
+              QUIC_CONNECTION Connection {};
+              Connection.PathsCount = 4;
+
+              for (uint8_t i = 0; i < Connection.PathsCount; ++i) {
+                  Connection.Paths[i].InUse = TRUE;
+                  Connection.Paths[i].ID = i;
+              }
+              Connection.Paths[0].IsActive = TRUE;
+
+              QUIC_PATH* SavedPacketPath = &Connection.Paths[2];
+              const uint8_t OriginalPacketPathId = SavedPacketPath->ID;
+              ASSERT_EQ(OriginalPacketPathId, (uint8_t)2);
+
+              // Remove a lower-index non-active path exactly as CID retirement can do
+              // from QuicConnReplaceRetiredCids while receive post-processing retains
+              // a QUIC_PATH* captured before frame processing.
+              ASSERT_TRUE(Test_QuicPathRemove(&Connection, 1));
+              ASSERT_EQ(Connection.PathsCount, (uint8_t)3);
+
+              // The saved address is still inside the live array and InUse is TRUE,
+              // but compaction has changed the object at that address.
+              ASSERT_TRUE(SavedPacketPath->InUse);
+              EXPECT_NE(SavedPacketPath->ID, OriginalPacketPathId);
+              EXPECT_EQ(SavedPacketPath->ID, (uint8_t)3);
+
+              // Identity lookup finds the packet's real path at a different address.
+              uint8_t CurrentIndex = UINT8_MAX;
+              QUIC_PATH* CurrentPacketPath =
+                  Test_QuicConnGetPathByID(&Connection, OriginalPacketPathId, &CurrentIndex);
+              ASSERT_NE(CurrentPacketPath, nullptr);
+              EXPECT_EQ(CurrentIndex, (uint8_t)1);
+              EXPECT_EQ(CurrentPacketPath->ID, OriginalPacketPathId);
+              EXPECT_NE(CurrentPacketPath, SavedPacketPath);
+          }
+          EOF
+          tail -n 55 src/core/unittest/RangeTest.cpp
+
+      - name: Prepare build container
+        shell: pwsh
+        working-directory: msquic
+        run: ./scripts/prepare-machine.ps1 -ForContainerBuild -Tls openssl
+
+      - name: Build MsQuic core tests with ASan
+        shell: pwsh
+        working-directory: msquic
+        run: ./scripts/build.ps1 -Config Debug -Platform linux -Arch x64 -Tls openssl -DisablePerf -SanitizeAddress -OneBranch
+
+      - name: Run path identity regression
+        shell: bash
+        working-directory: msquic
+        run: |
+          set -euxo pipefail
+          BIN="$(find artifacts -type f -name msquiccoretest -perm -111 | head -n 1)"
+          test -n "$BIN"
+          echo "CORETEST=$BIN"
+          ASAN_OPTIONS=detect_leaks=0 "$BIN" --gtest_filter=PathIdentityTest.*
