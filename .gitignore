@@ -1,0 +1,19 @@
+# Secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+cookies*.txt
+
+# Captured sensitive data (tokens, user data, raw responses)
+loot/
+
+# Large or noisy tool output
+*.log
+*.pcap
+*.har
+
+# OS and editor files
+.DS_Store
+.vscode/
+.idea/
